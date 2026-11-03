@@ -19,7 +19,9 @@ jobs:
         run: python scripts/validate_spec.py
       - name: Check accidental secret patterns
         run: |
-          if git grep -nE '(sb_secret_|service_role[[:space:]]*[:=][[:space:]]*[A-Za-z0-9_-]{20,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)' -- ':!scripts/validate_spec.py'; then
+          # Exclude this workflow because it contains the detection expression itself.
+          # Continue scanning all other tracked files.
+          if git grep -nE '(sb_secret_|service_role[[:space:]]*[:=][[:space:]]*[A-Za-z0-9_-]{20,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)' -- ':!scripts/validate_spec.py' ':!.github/workflows/spec-validation.yml'; then
             echo "Potential secret found. Review and remove it."
             exit 1
           fi
