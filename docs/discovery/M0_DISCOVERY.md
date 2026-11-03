@@ -69,6 +69,17 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Authenticated request for `m0-backup-test/documents/test.txt` did not return file content. First status-only invocation reported HTTP 400; a subsequent body-inspection request returned JSON `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`. This 404 is consistent with an RLS-filtered object, given prior independent SQL evidence that the object exists.
 - **Limitations:** status-only and body-inspection responses differ (400 vs body status 404); record both, do not assert they were identical. No affirmative authorised-read test or restored policy comparison was performed. Service-role bypass and cross-project isolation not tested here.
 
+## Executed Cloud Storage policy restore and enforcement - 3 November 2026
+
+**Result: PASS for manually reconstructed single-policy recovery and narrow allow/deny enforcement; automated policy export/restore remains unverified.**
+
+- In disposable source `qfcowkrbothbseswosjg`, created `m0_allow_test_user_document` on `storage.objects`: permissive `SELECT` to `authenticated`, limited to bucket `m0-backup-test`, object `documents/test.txt`, and synthetic user UUID `a53144f6-ee4a-41ea-9aa4-259d7ef49a18`.
+- Operator verified source policy through `pg_policies`, then manually reconstructed and retained SQL at `$HOME/supabase-m0/backups/storage/m0_storage_policy.sql`, SHA-256 `955c9e779237c6eaffd9952c3755781fc2817220742c0f943d59eb35b9b46adc`. This was **not an automated policy export**.
+- Destination `fdlozdsycfeaxglwstjx` initially had no `storage.objects` policies. The policy was created there, and destination `pg_policies` output matched source for policy name, permissiveness, roles, command, qualifier and null `with_check`.
+- Using the restored synthetic email/password user, GET `documents/test.txt` returned HTTP **200**, proving permitted read.
+- Same user's GET `images/binary-test.bin` returned HTTP **400** in status-only test; subsequent response-body inspection returned JSON `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`. Earlier destination SQL confirmed this object exists. The 404 is consistent with RLS-filtered access; note differing reported statuses between invocations.
+- **Scope:** one synthetic user, one policy, one permitted object, one denied object. Not proof of automated extraction, all policies, cross-user isolation, other verbs, service-role behaviour, policy portability or complete Storage recovery.
+
 ## Executed Cloud Auth email/password recovery - 3 November 2026
 
 **Result: PASS for synthetic email/password user and identity data restore with successful password sign-in; full Auth configuration recovery remains unverified.**
@@ -136,9 +147,9 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [x] Dedicated disposable Cloud source and independent restore target approved
 - [ ] Disposable pinned self-hosted source and independent restore target approved
 - [ ] CLI, PostgreSQL, Auth, Storage and Functions versions recorded
-- [ ] Permissions, TLS, least privilege and cross-project access denial tested (unauthenticated endpoints rejected and synthetic signed-in user could not read private object; policy restore, allowed access and cross-project denial remain)
+- [ ] Permissions, TLS, least privilege and cross-project access denial tested (unauthenticated requests rejected; one restored policy permits intended document and restricts another object; cross-project denial and broader privilege checks remain)
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
-- [ ] Storage export/restore with pagination and every object checksum (three-file manual recovery operator-attested PASS; paginated automation and captured destination checksums remain)
+- [ ] Storage export/restore with pagination and every object checksum (three-file manual recovery operator-attested PASS and one manually reconstructed Storage policy restored with allow/deny tests; paginated automation and captured destination checksums remain)
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
 - [x] Edge Function source redeployed and invoked (one synthetic function deployed to previously absent destination and authenticated HTTP 200 verified; independent offline source escrow, dependencies and secrets remain unverified)
 - [ ] Settings/secrets manual steps executed from independent recovery materials
