@@ -1,0 +1,17 @@
+test_id,title,minimum_acceptance,priority,milestone,evidence_required,status
+T-01,Connections and capabilities,Cloud and self-hosted; TLS/permissions; all 6 capability states,P0,"M0,M2",signed run log + fixture versions + artefact hashes,not_run
+T-02,PostgreSQL recovery,"Restore full/schema/data/table with RLS, FK, sequences, roles",P0,"M2,M5",signed run log + fixture versions + artefact hashes,not_run
+T-03,Storage recovery,Bucket metadata and byte hashes reconcile across pagination,P0,"M2,M5",signed run log + fixture versions + artefact hashes,not_run
+T-04,Auth recovery,Users/identities plus test sign-in and manual secrets,P0,"M2,M5",signed run log + fixture versions + artefact hashes,not_run
+T-05,Edge Function recovery,Verified Git source revision and clean redeploy,P0,"M3,M5",signed run log + fixture versions + artefact hashes,not_run
+T-06,Project settings,Supported settings re-applied and manual gaps signed,P0,"M3,M5",signed run log + fixture versions + artefact hashes,not_run
+T-07,Full disaster recovery,Clean Cloud and self-hosted project rebuild with smoke tests,P0,"M5,M6",signed run log + fixture versions + artefact hashes,not_run
+T-08,Partial recovery,"Row/table preview, conflict and rollback safety",P0,M5,signed run log + fixture versions + artefact hashes,not_run
+T-09,Loss of Mac,"Independent restore host, archive and escrowed key",P0,"M4,M6",signed run log + fixture versions + artefact hashes,not_run
+T-10,Tamper and crypto,"Ciphertext, signature and manifest tampering rejected",P0,M4,signed run log + fixture versions + artefact hashes,not_run
+T-11,Five storage adapters,Local/S3/Azure/Drive/OneDrive upload and retrieve,P0,M4,signed run log + fixture versions + artefact hashes,not_run
+T-12,Faults and schedules,"DST, crash, disk-full, retries and idempotency",P0,"M2,M6",signed run log + fixture versions + artefact hashes,not_run
+T-13,Security and RBAC,"Project isolation, MFA, approvals, CSRF and rate limits",P0,"M1,M6",signed run log + fixture versions + artefact hashes,not_run
+T-14,User experience,"VoiceOver, keyboard, mobile, WCAG 2.2 AA",P1,M6,signed run log + fixture versions + artefact hashes,not_run
+T-15,Performance,20 projects; bounded resource and measurable SLO,P1,M6,signed run log + fixture versions + artefact hashes,not_run
+T-16,Release/upgrade,"Notarisation, migrations, N-1 archive compatibility",P0,M6,signed run log + fixture versions + artefact hashes,not_run

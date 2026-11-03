@@ -1,0 +1,163 @@
+openapi: 3.1.0
+info:
+  title: Supabase Backup Manager API
+  version: 1.0.0
+  description: Proposed contract. Server-side RBAC and CSRF protection are mandatory; not an implementation.
+servers:
+  - url: https://localhost:8443/api/v1
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: health
+      security: []
+      responses:
+        '200': {description: Healthy, content: {application/json: {schema: {$ref: '#/components/schemas/Health'}}}}
+  /projects:
+    get:
+      operationId: listProjects
+      responses:
+        '200': {description: Authorised projects, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Project'}}}}}
+    post:
+      operationId: createProject
+      x-required-role: administrator
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateProject'}}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/Project'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /projects/{projectId}/capabilities:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get:
+      operationId: getCapabilities
+      responses:
+        '200': {description: Assessed capabilities, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Capability'}}}}}
+  /connections/test:
+    post:
+      operationId: testConnection
+      x-required-role: administrator
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ConnectionTest'}}}}
+      responses:
+        '200': {description: Redacted diagnostics, content: {application/json: {schema: {$ref: '#/components/schemas/ConnectionResult'}}}}
+  /projects/{projectId}/backups:
+    parameters: [{$ref: '#/components/parameters/ProjectId'}]
+    get:
+      operationId: listBackups
+      parameters:
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: Paginated backups, content: {application/json: {schema: {$ref: '#/components/schemas/BackupPage'}}}}
+    post:
+      operationId: startBackup
+      x-required-role: operator
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BackupRequest'}}}}
+      responses:
+        '202': {description: Queued, content: {application/json: {schema: {$ref: '#/components/schemas/JobAccepted'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /recovery-sets/{recoverySetId}:
+    get:
+      operationId: getRecoverySet
+      parameters: [{$ref: '#/components/parameters/RecoverySetId'}]
+      responses:
+        '200': {description: Recovery-set metadata, content: {application/json: {schema: {$ref: '#/components/schemas/RecoverySet'}}}}
+  /restores/preview:
+    post:
+      operationId: previewRestore
+      x-required-role: operator
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RestoreRequest'}}}}
+      responses:
+        '200': {description: Immutable impact plan, content: {application/json: {schema: {$ref: '#/components/schemas/RestorePlan'}}}}
+  /restores:
+    post:
+      operationId: requestRestore
+      x-required-role: administrator
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RestoreExecution'}}}}
+      responses:
+        '202': {description: Queued or awaiting approval, content: {application/json: {schema: {$ref: '#/components/schemas/JobAccepted'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /restores/{restoreId}/approvals:
+    post:
+      operationId: approveRestore
+      x-required-role: recovery_approver
+      parameters: [{$ref: '#/components/parameters/RestoreId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+      responses:
+        '200': {description: Decision recorded}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /events:
+    get:
+      operationId: streamEvents
+      description: Project-scoped SSE stream; authorisation rechecked on reconnect.
+      responses:
+        '200': {description: Event stream, content: {text/event-stream: {schema: {type: string}}}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ProjectId: {name: projectId, in: path, required: true, schema: {type: string, format: uuid}}
+    RecoverySetId: {name: recoverySetId, in: path, required: true, schema: {type: string, format: uuid}}
+    RestoreId: {name: restoreId, in: path, required: true, schema: {type: string, format: uuid}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}}
+  responses:
+    Forbidden: {description: Not authorised}
+    Conflict: {description: State, duplicate, or approval conflict}
+  schemas:
+    Health:
+      type: object
+      required: [status, version]
+      properties: {status: {type: string, enum: [ok, degraded]}, version: {type: string}}
+    Project:
+      type: object
+      required: [id, name, environment]
+      properties: {id: {type: string, format: uuid}, name: {type: string}, environment: {type: string, enum: [cloud, self_hosted]}, readiness: {type: string, enum: [recoverable, manual_steps, at_risk, unknown]}}
+    CreateProject:
+      type: object
+      required: [name, environment]
+      properties: {name: {type: string, minLength: 1}, environment: {type: string, enum: [cloud, self_hosted]}}
+    Capability:
+      type: object
+      required: [component, capability, assessed_at]
+      properties: {component: {type: string}, capability: {type: string, enum: [automated, manual, unsupported, unknown]}, assessed_at: {type: string, format: date-time}, evidence: {type: object, additionalProperties: true}}
+    ConnectionTest:
+      type: object
+      required: [project_id, secret_ref]
+      properties: {project_id: {type: string, format: uuid}, secret_ref: {type: string}, tls_mode: {type: string, enum: [verify-full, verify-ca]}}
+    ConnectionResult:
+      type: object
+      required: [reachable, tls_verified, authenticated]
+      properties: {reachable: {type: boolean}, tls_verified: {type: boolean}, authenticated: {type: boolean}, warnings: {type: array, items: {type: string}}}
+    BackupRequest:
+      type: object
+      required: [components]
+      properties: {policy_id: {type: string, format: uuid}, components: {type: array, minItems: 1, items: {type: string, enum: [postgresql, storage, auth, functions, settings, secrets]}}}
+    JobAccepted:
+      type: object
+      required: [job_id, state]
+      properties: {job_id: {type: string, format: uuid}, state: {type: string}}
+    BackupPage:
+      type: object
+      required: [items]
+      properties: {items: {type: array, items: {$ref: '#/components/schemas/RecoverySet'}}, next_cursor: {type: [string, 'null']}}
+    RecoverySet:
+      type: object
+      required: [id, project_id, state, started_at]
+      properties: {id: {type: string, format: uuid}, project_id: {type: string, format: uuid}, state: {type: string, enum: [collecting, staged, published, conditional, failed]}, started_at: {type: string, format: date-time}, readiness: {type: string, enum: [recoverable, manual_steps, at_risk, unknown]}, component_statuses: {type: array, items: {$ref: '#/components/schemas/Capability'}}}
+    RestoreRequest:
+      type: object
+      required: [recovery_set_id, target_fingerprint, scope, production]
+      properties: {recovery_set_id: {type: string, format: uuid}, target_fingerprint: {type: string}, scope: {type: object, additionalProperties: true}, production: {type: boolean}}
+    RestorePlan:
+      type: object
+      required: [plan_digest, expires_at, requires_approval, steps]
+      properties: {plan_digest: {type: string}, expires_at: {type: string, format: date-time}, requires_approval: {type: boolean}, steps: {type: array, items: {type: string}}, risks: {type: array, items: {type: string}}}
+    RestoreExecution:
+      type: object
+      required: [plan_digest, target_fingerprint]
+      properties: {plan_digest: {type: string}, target_fingerprint: {type: string}, confirmation: {type: string}}
+    Approval:
+      type: object
+      required: [plan_digest, decision]
+      properties: {plan_digest: {type: string}, decision: {type: string, enum: [approve, reject]}}
