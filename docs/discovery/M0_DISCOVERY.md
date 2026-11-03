@@ -1,5 +1,5 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual single-object and three-file Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual and automated four-object Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
 
 ## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
 
@@ -80,6 +80,19 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Same user's GET `images/binary-test.bin` returned HTTP **400** in status-only test; subsequent response-body inspection returned JSON `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`. Earlier destination SQL confirmed this object exists. The 404 is consistent with RLS-filtered access; note differing reported statuses between invocations.
 - **Scope:** one synthetic user, one policy, one permitted object, one denied object. Not proof of automated extraction, all policies, cross-user isolation, other verbs, service-role behaviour, policy portability or complete Storage recovery.
 
+## Executed Cloud Storage automated backup and restore - 3 November 2026
+
+**Result: PASS for four-object automated API-based backup, restore to empty private bucket, and independently verified destination bytes. Overall M0 remains NO-GO.**
+
+- Source disposable project `qfcowkrbothbseswosjg`, private bucket `m0-backup-test`; destination disposable project `fdlozdsycfeaxglwstjx`, newly created private bucket `m0-automated-restore-test`.
+- Operator's local macOS environment: Python 3.9.6 and jq 1.7.1. Source and destination project-specific secret keys supplied to separate Terminal session variables, not stored in evidence or Git.
+- `$HOME/supabase-m0/scripts/backup_storage.py` used Supabase Storage API with page size 2, offset-based listing, recursive traversal of virtual folders (`id=null`), authenticated object downloads, expected-size checks, and local SHA-256 manifest at `$HOME/supabase-m0/backups/storage/automated/manifest.json`.
+- Root listing observed offset 0: 2 entries; offset 2: 2 entries; offset 4: empty. Nested folder listings returned expected entries. Four objects downloaded: `documents/test.txt` (28 bytes), `images/binary-test.bin` (65,536 bytes), `nested/deep/data.json` (29 bytes), `recovery-test.txt` (453 bytes).
+- Operator independently checked all four local backup files against manifest SHA-256 and size: 4/4 PASS.
+- `$HOME/supabase-m0/scripts/restore_storage.py` validated fixed disposable project/bucket IDs, source manifest identity, all four local file checksums and sizes, private destination bucket status and empty root listing before uploading four objects with `x-upsert: false`. Operator output: four `RESTORED` lines and `SUCCESS: Uploaded 4 objects`.
+- Independent destination API download script fetched each restored object using destination credentials and compared SHA-256 and byte size against original manifest: **4/4 PASS**, `SUCCESS: All restored objects match the backup manifest`.
+- **Scope and limitations:** four synthetic objects; pagination demonstrated at root but not stress-tested at scale; restore is a one-off local Python script, not integrated into the backup manager; no retries/resume, failure injection, deletion reconciliation, bucket configuration or policy restoration within automated workflow, service-role hardening, independently escrowed credentials, cross-service consistency, measured RPO/RTO or source-project loss scenario. Backup scripts and artefacts remain on operator's Mac, not committed to Git. No production data used.
+
 ## Executed Cloud Auth email/password recovery - 3 November 2026
 
 **Result: PASS for synthetic email/password user and identity data restore with successful password sign-in; full Auth configuration recovery remains unverified.**
@@ -149,7 +162,7 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [ ] CLI, PostgreSQL, Auth, Storage and Functions versions recorded
 - [ ] Permissions, TLS, least privilege and cross-project access denial tested (unauthenticated requests rejected; one restored policy permits intended document and restricts another object; cross-project denial and broader privilege checks remain)
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
-- [ ] Storage export/restore with pagination and every object checksum (three-file manual recovery operator-attested PASS and one manually reconstructed Storage policy restored with allow/deny tests; paginated automation and captured destination checksums remain)
+- [x] Storage export/restore with pagination and every object checksum (four synthetic objects automated, root pagination and nested folders tested, destination bytes independently verified; larger scale and production readiness not established)
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
 - [x] Edge Function source redeployed and invoked (one synthetic function deployed to previously absent destination and authenticated HTTP 200 verified; independent offline source escrow, dependencies and secrets remain unverified)
 - [ ] Settings/secrets manual steps executed from independent recovery materials
