@@ -60,6 +60,15 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Unauthenticated GET to authenticated object endpoint returned HTTP 400 with JSON `{"statusCode":"400","error":"Error","message":"headers must have required property 'authorization'","code":"InvalidRequest"}`, explicitly confirming rejection for missing authorisation header.
 - Still untested: valid but unauthorised identity, per-object RLS, source/destination policy equivalence, and authorised download.
 
+## Executed Cloud Storage authenticated access restriction - 3 November 2026
+
+**Result: PASS for a narrowly scoped valid-user denied-read test; policy backup and restore remain unverified.**
+
+- Destination synthetic account `m0-test@example.com` successfully obtained an access token via password authentication. No token or password recorded.
+- Destination `storage.objects` had no policies according to `pg_policies`. SQL confirmed RLS enabled (`relrowsecurity=true`) and force RLS disabled (`relforcerowsecurity=false`).
+- Authenticated request for `m0-backup-test/documents/test.txt` did not return file content. First status-only invocation reported HTTP 400; a subsequent body-inspection request returned JSON `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`. This 404 is consistent with an RLS-filtered object, given prior independent SQL evidence that the object exists.
+- **Limitations:** status-only and body-inspection responses differ (400 vs body status 404); record both, do not assert they were identical. No affirmative authorised-read test or restored policy comparison was performed. Service-role bypass and cross-project isolation not tested here.
+
 ## Executed Cloud Auth email/password recovery - 3 November 2026
 
 **Result: PASS for synthetic email/password user and identity data restore with successful password sign-in; full Auth configuration recovery remains unverified.**
@@ -127,7 +136,7 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [x] Dedicated disposable Cloud source and independent restore target approved
 - [ ] Disposable pinned self-hosted source and independent restore target approved
 - [ ] CLI, PostgreSQL, Auth, Storage and Functions versions recorded
-- [ ] Permissions, TLS, least privilege and cross-project access denial tested (two unauthenticated Storage endpoints rejected; authorised-user policy tests remain)
+- [ ] Permissions, TLS, least privilege and cross-project access denial tested (unauthenticated endpoints rejected and synthetic signed-in user could not read private object; policy restore, allowed access and cross-project denial remain)
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
 - [ ] Storage export/restore with pagination and every object checksum (three-file manual recovery operator-attested PASS; paginated automation and captured destination checksums remain)
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
