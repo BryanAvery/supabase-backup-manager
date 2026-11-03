@@ -1,5 +1,5 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture and manual single-object Storage recovery drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual single-object Storage recovery, and synthetic email/password Auth recovery drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
 
 ## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
 
@@ -17,9 +17,9 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
   - parent: `0a7083c301db6a7a2125751664873464` on both;
   - child: `5955fa9eb3c8a55d5937dab96399f744` on both.
 - Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
-- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, Auth, Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
+- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, bulk Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
 
-**Next drill:** demonstrate recovery of the existing synthetic Auth user into the independent disposable target, preserving identity and verifying sign-in; then expand Storage recovery to paginated bulk objects and denied-access tests. Keep real user data and credentials out of evidence and Git.
+**Next drill:** redeploy and invoke a synthetic Edge Function on the independent disposable target; then expand Storage recovery to paginated bulk objects and denied-access tests. Keep real user data and credentials out of evidence and Git.
 
 ## Executed Cloud Storage single-object recovery - 3 November 2026
 
@@ -33,7 +33,22 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Operator downloaded the destination object independently and calculated SHA-256: `01813332407a69e1a5683271b60ac0adce259932ff516632036d60efa3522842`.
 - **Byte-for-byte equality confirmed** by matching SHA-256 digests, with matching object size and bucket privacy.
 - Scope limitations: single-object manual operation only; no paginated enumeration, bulk export/restore, access-policy equivalence, denied anonymous access test, version handling, retention, automation, retry/resume, or RPO/RTO measurement. Private bucket metadata alone does not prove every access-control policy. No production data used.
-- Synthetic Auth user `m0-test@example.com` was separately confirmed in source `auth.users` with confirmed email. **No Auth restore or target sign-in has been demonstrated.**
+- Synthetic Auth user `m0-test@example.com` was separately confirmed in source `auth.users` with confirmed email. The subsequent controlled Auth restore and sign-in are recorded below.
+
+## Executed Cloud Auth email/password recovery - 3 November 2026
+
+**Result: PASS for synthetic email/password user and identity data restore with successful password sign-in; full Auth configuration recovery remains unverified.**
+
+- Source disposable project `qfcowkrbothbseswosjg`; independent disposable destination `fdlozdsycfeaxglwstjx`.
+- Source synthetic user: `m0-test@example.com`; original UUID `a53144f6-ee4a-41ea-9aa4-259d7ef49a18`, confirmed email and one email identity.
+- Source backup: `pg_dump -W --format=custom --data-only --no-owner --no-acl --table=auth.users --table=auth.identities --file=$HOME/supabase-m0/backups/auth/m0_auth.dump`. Archive 2.5 KB, gzip, dump version 1.16-0, PostgreSQL source 17.11, pg_dump 18.6.
+- Archive TOC contained only two TABLE DATA entries: `auth.users` and `auth.identities`. Local archive permissions restricted with `chmod 600`; archive not committed to Git.
+- Before restore, independent destination had zero Auth users and zero Auth identities.
+- Destination restore used `pg_restore -W --verbose --single-transaction --exit-on-error --data-only --no-owner --no-acl --dbname=postgres .../m0_auth.dump` with destination-specific Session pooler credentials. Terminal reported both table-data operations with no errors.
+- Post-restore destination SQL confirmed original UUID, confirmed email, nonempty password hash, and one email identity. No password hashes or secrets included in Git evidence.
+- Operator submitted original test email/password to the **destination** Auth password-grant endpoint (`/auth/v1/token?grant_type=password`) using the destination publishable/anon key. Response contained `user_id = a53144f6-ee4a-41ea-9aa4-259d7ef49a18` and `error = null`. Access tokens and passwords were not recorded.
+- **Proven:** identity and password-based login survive this narrow cross-project data restore.
+- **Not proven:** full Auth schema/config restore, OAuth/SAML/MFA, refresh-token/session continuity, email templates/SMTP, redirect/provider configuration, external secrets, triggers and cross-service dependencies, multi-user recovery, fresh-host execution, RPO/RTO, or repeatability under automation. This manual data-only method must not be presented as a general-purpose production Auth recovery procedure.
 
 ## Capability matrix
 | Component | Supabase Cloud | Self-hosted | Proof required |
@@ -67,7 +82,7 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [ ] Permissions, TLS, least privilege and cross-project access denial tested
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
 - [ ] Storage export/restore with pagination and every object checksum
-- [ ] Auth records/config restored and synthetic login succeeds
+- [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
 - [ ] Edge Function source redeployed and invoked
 - [ ] Settings/secrets manual steps executed from independent recovery materials
 - [ ] Recovery time, recovery point and component consistency window measured
