@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Recovery Set Manifest",
+  "type": "object",
+  "required": [
+    "format_version",
+    "recovery_set_id",
+    "project_id",
+    "source_type",
+    "capture_started_at",
+    "capture_completed_at",
+    "components",
+    "known_gaps",
+    "manifest_signature_ref"
+  ],
+  "properties": {
+    "format_version": {
+      "const": "1.0"
+    },
+    "recovery_set_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_type": {
+      "enum": [
+        "supabase_cloud",
+        "self_hosted"
+      ]
+    },
+    "capture_started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "capture_completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "status",
+          "capture_started_at",
+          "capture_ended_at"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "postgresql",
+              "storage",
+              "auth",
+              "functions",
+              "settings",
+              "secrets"
+            ]
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "captured",
+              "manual_steps_required",
+              "unsupported",
+              "failed"
+            ]
+          },
+          "capture_started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "capture_ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "archive_uri": {
+            "type": "string"
+          },
+          "encryption_envelope_ref": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "known_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "manifest_signature_ref": {
+      "type": "string"
+    },
+    "restore_test_status": {
+      "enum": [
+        "not_tested",
+        "passed",
+        "failed"
+      ]
+    }
+  }
+}
