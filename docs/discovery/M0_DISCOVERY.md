@@ -80,6 +80,17 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Same user's GET `images/binary-test.bin` returned HTTP **400** in status-only test; subsequent response-body inspection returned JSON `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`. Earlier destination SQL confirmed this object exists. The 404 is consistent with RLS-filtered access; note differing reported statuses between invocations.
 - **Scope:** one synthetic user, one policy, one permitted object, one denied object. Not proof of automated extraction, all policies, cross-user isolation, other verbs, service-role behaviour, policy portability or complete Storage recovery.
 
+## Executed Storage corruption detection and restore refusal - 3 November 2026
+
+**Result: PASS for local checksum corruption detection and isolated restore refusal; no network requests in restore refusal test.**
+
+- Copied the four-object backup to `$HOME/supabase-m0/tests/corrupted-backup` without modifying the original verified backup.
+- Appended `SIMULATED CORRUPTION\n` to `objects/documents/test.txt` while preserving the original manifest.
+- Independent local integrity checker identified exactly one corrupted object (`documents/test.txt`); the remaining three passed SHA-256 and size verification. Operator output: `Corrupted files detected: 1`, `TEST PASSED: Corrupted backup identified`.
+- Created an isolated copy of `restore_storage.py` pointing to corrupted backup. Stubbed the destination private-bucket metadata response, with all other API calls replaced by a network-disabled exception.
+- Operator output: `PASS: Mock destination bucket configured`, `ERROR: Backup integrity mismatch: documents/test.txt`. This confirms refusal before the script's upload stage. No destination mutation and no network access in the isolated refusal test.
+- **Limitations:** this was a simulated network-free test, not a real interrupted restore; the script currently checks destination bucket metadata before local file integrity. Retry, partial upload recovery, timeout, and resume behaviour remain untested.
+
 ## Executed Cloud Storage automated backup and restore - 3 November 2026
 
 **Result: PASS for four-object automated API-based backup, restore to empty private bucket, and independently verified destination bytes. Overall M0 remains NO-GO.**
