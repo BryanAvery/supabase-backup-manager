@@ -35,7 +35,9 @@ if baseline.is_file():
     check_ids(baseline, r"REQ-[A-Z]+-\d{3}")
 
 spec = ROOT / "docs/spec/v1.0.0"
-if spec.exists():
+if not spec.is_dir():
+    errors.append("Missing mandatory complete specification directory docs/spec/v1.0.0")
+else:
     required = ["requirements/SRS.md", "requirements/traceability.csv",
                 "architecture/ARCHITECTURE.md", "api/openapi.yaml",
                 "data/MODEL.md", "data/schema.sql",
@@ -92,8 +94,6 @@ if spec.exists():
             con.close()
         except Exception as exc:
             errors.append(f"SQLite schema invalid: {exc}")
-else:
-    print("NOTICE: complete specification has not yet been imported. Baseline-only checks run.")
 
 if errors:
     print("Specification validation failed:")
