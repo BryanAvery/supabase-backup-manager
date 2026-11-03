@@ -19,7 +19,7 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
 - Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, bulk Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
 
-**Next drill:** redeploy and invoke a synthetic Edge Function on the independent disposable target; then expand Storage recovery to paginated bulk objects and denied-access tests. Keep real user data and credentials out of evidence and Git.
+**Next drill:** prove clean-target Edge Function recovery using an independently retained source artifact and a new synthetic function name; then expand Storage recovery to paginated bulk objects and denied-access tests. Keep real user data and credentials out of evidence and Git.
 
 ## Executed Cloud Storage single-object recovery - 3 November 2026
 
@@ -49,6 +49,17 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Operator submitted original test email/password to the **destination** Auth password-grant endpoint (`/auth/v1/token?grant_type=password`) using the destination publishable/anon key. Response contained `user_id = a53144f6-ee4a-41ea-9aa4-259d7ef49a18` and `error = null`. Access tokens and passwords were not recorded.
 - **Proven:** identity and password-based login survive this narrow cross-project data restore.
 - **Not proven:** full Auth schema/config restore, OAuth/SAML/MFA, refresh-token/session continuity, email templates/SMTP, redirect/provider configuration, external secrets, triggers and cross-service dependencies, multi-user recovery, fresh-host execution, RPO/RTO, or repeatability under automation. This manual data-only method must not be presented as a general-purpose production Auth recovery procedure.
+
+## Executed Cloud Edge Function invocation - 3 November 2026
+
+**Result: PASS for authenticated invocation of an existing destination deployment; clean-target Edge Function recovery NOT YET PROVEN.**
+
+- Source disposable project `qfcowkrbothbseswosjg` and destination disposable project `fdlozdsycfeaxglwstjx` both already contained active Edge Function `m0-fixture` (version 2, `verify_jwt = true`) when inspected.
+- The source and destination function files `index.ts` had identical code returning JSON `{"fixture":"m0","version":1,"ok":true}`. Deployment bundle SHA-256 metadata differed; no assertion of identical deployed bundles.
+- Operator obtained a destination Auth access token using the restored synthetic email/password user, then invoked `https://fdlozdsycfeaxglwstjx.supabase.co/functions/v1/m0-fixture` with the token.
+- Observed response: HTTP `200`, body `{"fixture":"m0","version":1,"ok":true}`.
+- **Proven:** destination Edge Function executes correctly when invoked by the restored authenticated user.
+- **Not proven:** source export from independent backup, clean-target deployment, missing-function recovery, dependency/import map preservation, configuration/secrets recovery, and repeatable redeployment. Function already existed on destination; therefore do not mark the Edge Function restore acceptance criterion complete.
 
 ## Capability matrix
 | Component | Supabase Cloud | Self-hosted | Proof required |
@@ -83,7 +94,7 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
 - [ ] Storage export/restore with pagination and every object checksum
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
-- [ ] Edge Function source redeployed and invoked
+- [ ] Edge Function source redeployed and invoked (authenticated invocation of pre-existing destination function passed; independent clean-target redeployment remains)
 - [ ] Settings/secrets manual steps executed from independent recovery materials
 - [ ] Recovery time, recovery point and component consistency window measured
 - [ ] Corrupt backup, missing object and denied privilege tests fail closed
