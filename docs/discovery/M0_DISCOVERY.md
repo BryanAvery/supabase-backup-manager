@@ -1,5 +1,5 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual single-object Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual single-object and three-file Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
 
 ## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
 
@@ -17,9 +17,9 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
   - parent: `0a7083c301db6a7a2125751664873464` on both;
   - child: `5955fa9eb3c8a55d5937dab96399f744` on both.
 - Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
-- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, bulk Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
+- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, automated bulk Storage object recovery, independently escrowed Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
 
-**Next drill:** expand Storage recovery to paginated bulk objects and denied-access tests; separately prove Edge Function recovery from independently retained source after source loss. Keep real user data and credentials out of evidence and Git.
+**Next drill:** verify private Storage access denial and automated paginated enumeration; separately prove Edge Function recovery from independently retained source after source loss. Keep real user data and credentials out of evidence and Git.
 
 ## Executed Cloud Storage single-object recovery - 3 November 2026
 
@@ -34,6 +34,22 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - **Byte-for-byte equality confirmed** by matching SHA-256 digests, with matching object size and bucket privacy.
 - Scope limitations: single-object manual operation only; no paginated enumeration, bulk export/restore, access-policy equivalence, denied anonymous access test, version handling, retention, automation, retry/resume, or RPO/RTO measurement. Private bucket metadata alone does not prove every access-control policy. No production data used.
 - Synthetic Auth user `m0-test@example.com` was separately confirmed in source `auth.users` with confirmed email. The subsequent controlled Auth restore and sign-in are recorded below.
+
+## Executed Cloud Storage three-file manual recovery - 3 November 2026
+
+**Result: PASS based on operator-confirmed byte comparisons for three synthetic objects; automated paginated bulk recovery remains unverified.**
+
+- Source: disposable Cloud project `qfcowkrbothbseswosjg`; independent destination: `fdlozdsycfeaxglwstjx`; private bucket `m0-backup-test` in both.
+- Three locally created test objects uploaded to the source and verified by source SQL: `documents/test.txt` (28 bytes, `text/plain`), `images/binary-test.bin` (65,536 bytes, `application/macbinary`), and `nested/deep/data.json` (29 bytes, `application/json`).
+- Operator downloaded the source objects into `$HOME/supabase-m0/storage-backup/` preserving relative paths. Local backup SHA-256 checksums matched original fixture files:
+  - `documents/test.txt`: `90f2a691a1022eeeebf48033e9f672628a768dc899162ccf8c19527db5b00cb6`
+  - `images/binary-test.bin`: `050181748ac0277fd066425225ebb1cfa7d5d1a8e0f8fc10ac3dc0fdec654dc1`
+  - `nested/deep/data.json`: `029be1f5767115bb36b045d67d4492e48a75f01f1f3c1bbb5bd3cd11eb103a63`
+- An earlier `recovery-test.txt` and macOS `.DS_Store` files were also present locally but were excluded from this three-file drill.
+- Operator manually uploaded the three backed-up objects to the independent destination with matching relative paths. Destination SQL returned the expected names, sizes and MIME types for all three.
+- Operator was instructed to download the three destination objects independently and compare each to the original fixture using `cmp -s`. Operator confirmed "all okay"; individual final command output was not supplied. Treat this as **operator-attested PASS**, not independently captured checksum evidence for the destination downloads.
+- **Proven within this manual drill:** multiple object types, nested folder paths, source backup checksum integrity, destination metadata equality and operator-attested byte equality.
+- **Not proven:** automated/paginated object listing, automated bulk export/restore, completeness for large buckets, object versioning, retries/resume, policy equivalence, anonymous access denial, and independent recorded destination SHA-256 values.
 
 ## Executed Cloud Auth email/password recovery - 3 November 2026
 
@@ -104,7 +120,7 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [ ] CLI, PostgreSQL, Auth, Storage and Functions versions recorded
 - [ ] Permissions, TLS, least privilege and cross-project access denial tested
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
-- [ ] Storage export/restore with pagination and every object checksum
+- [ ] Storage export/restore with pagination and every object checksum (three-file manual recovery operator-attested PASS; paginated automation and captured destination checksums remain)
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
 - [x] Edge Function source redeployed and invoked (one synthetic function deployed to previously absent destination and authenticated HTTP 200 verified; independent offline source escrow, dependencies and secrets remain unverified)
 - [ ] Settings/secrets manual steps executed from independent recovery materials
