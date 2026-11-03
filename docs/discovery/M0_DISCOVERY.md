@@ -1,5 +1,25 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Desk research is complete; no disposable Cloud or self-hosted restore drills have been run. No existing user project was modified.
+Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** An isolated Cloud PostgreSQL fixture backup and restore drill has passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+
+## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
+
+**Result: PASS for isolated `m0_fixture` logical backup/restore only; overall M0 remains NO-GO.**
+
+- Source: disposable Supabase Cloud project `sbm-m0-cloud-source` (`qfcowkrbothbseswosjg`).
+- Destination: independent disposable Supabase Cloud project `sbm-m0-cloud-restore` (`fdlozdsycfeaxglwstjx`).
+- Region: London (`eu-west-2`); source PostgreSQL 17.11; local `pg_dump`/`pg_restore` 18.6.
+- Source backup: `pg_dump -W --format=custom --no-owner --no-acl --schema=m0_fixture --file=$HOME/supabase-m0/backups/m0_fixture_new.dump`. File 6.9 KB, custom archive dump version 1.16-0, 25 TOC entries, gzip compressed.
+- Archive inspection: `pg_restore --list` showed schema, two tables, two sequences, a view, table data, sequence values, primary/unique constraints, an index, a foreign key, RLS enablement and two policies.
+- Destination connection authenticated using the project-specific Session pooler user `postgres.fdlozdsycfeaxglwstjx`. Only the pre-existing synthetic destination `m0_fixture` schema was dropped with `DROP SCHEMA m0_fixture CASCADE`.
+- Restore: `pg_restore -W --verbose --exit-on-error --no-owner --no-acl --dbname=postgres .../m0_fixture_new.dump`; all reported object creation/data load steps completed, with no errors reported.
+- Destination checks: 3 parent rows; 4 child rows; 2 RLS policies; 1 foreign key.
+- Source/destination equality, using identical ordered MD5 expressions over IDs, labels, parent IDs and payloads:
+  - parent: `0a7083c301db6a7a2125751664873464` on both;
+  - child: `5955fa9eb3c8a55d5937dab96399f744` on both.
+- Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
+- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, Auth, Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
+
+**Next drill:** create synthetic Auth users and private Storage bucket objects only in the two disposable M0 projects; inventory metadata, test recoverability and verify sign-in and exact object bytes. Keep real user data and credentials out of evidence and Git.
 
 ## Capability matrix
 | Component | Supabase Cloud | Self-hosted | Proof required |
@@ -27,11 +47,11 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [x] Cloud and self-hosted provisional six-component capability matrix
 - [x] Threat model in `docs/spec/v1.0.0/architecture/ARCHITECTURE.md`
 - [x] Isolated experiment protocol and explicit evidence checklist
-- [ ] Dedicated disposable Cloud source and independent restore target approved
+- [x] Dedicated disposable Cloud source and independent restore target approved
 - [ ] Disposable pinned self-hosted source and independent restore target approved
 - [ ] CLI, PostgreSQL, Auth, Storage and Functions versions recorded
 - [ ] Permissions, TLS, least privilege and cross-project access denial tested
-- [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes
+- [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
 - [ ] Storage export/restore with pagination and every object checksum
 - [ ] Auth records/config restored and synthetic login succeeds
 - [ ] Edge Function source redeployed and invoked
@@ -51,4 +71,4 @@ R-M0-04: Self-hosted Storage backends and deployment topology vary (high).
 R-M0-05: RPO/RTO are provisional until measured (high).
 
 ## Sign-off
-Test environments: pending. Evidence location: pending. Owner: pending. Security reviewer: pending. Decision: NO-GO.
+Test environments: disposable Cloud source and restore projects listed above; self-hosted pending. Evidence location: operator Terminal transcript and local dump. Owner: pending. Security reviewer: pending. Decision: NO-GO.
