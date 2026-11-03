@@ -1,5 +1,5 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual single-object Storage recovery, and synthetic email/password Auth recovery drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual single-object Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
 
 ## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
 
@@ -19,7 +19,7 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
 - Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, bulk Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
 
-**Next drill:** prove clean-target Edge Function recovery using an independently retained source artifact and a new synthetic function name; then expand Storage recovery to paginated bulk objects and denied-access tests. Keep real user data and credentials out of evidence and Git.
+**Next drill:** expand Storage recovery to paginated bulk objects and denied-access tests; separately prove Edge Function recovery from independently retained source after source loss. Keep real user data and credentials out of evidence and Git.
 
 ## Executed Cloud Storage single-object recovery - 3 November 2026
 
@@ -61,6 +61,18 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - **Proven:** destination Edge Function executes correctly when invoked by the restored authenticated user.
 - **Not proven:** source export from independent backup, clean-target deployment, missing-function recovery, dependency/import map preservation, configuration/secrets recovery, and repeatable redeployment. Function already existed on destination; therefore do not mark the Edge Function restore acceptance criterion complete.
 
+## Executed Cloud Edge Function cross-project recovery - 3 November 2026
+
+**Result: PASS for recovery and authenticated execution of one synthetic Edge Function absent from the destination before deployment.**
+
+- Verified that `m0-edge-recovery` was absent from the independent destination `fdlozdsycfeaxglwstjx`; created and deployed it only in disposable source `qfcowkrbothbseswosjg` with `verify_jwt = true`.
+- Retrieved source `index.ts` from the active source deployment using Supabase management tooling, then redeployed that retrieved source to the destination as new function `m0-edge-recovery` with `verify_jwt = true`.
+- Inspected destination deployment: status ACTIVE, version 1, retrieved `index.ts` content matched the source; function-specific deployment bundle hashes differed and are not treated as byte-identical artifacts.
+- First operator invocation attempt failed at Auth token retrieval with HTTP `401` due to a key-entry issue; function was not invoked on that attempt. Following correction, operator obtained an authenticated destination token and invoked the recovered function.
+- Successful invocation: HTTP `200`, JSON body `{"fixture":"m0-edge-recovery","version":1,"restorable":true}`.
+- **Proven:** source extraction from an existing deployed function, cross-project redeployment into a destination previously lacking that function, and successful invocation using the recovered synthetic Auth account.
+- **Not proven:** independent offline backup escrow or Git-pinned source availability after source-project loss; multi-file dependencies, import maps, secret/environment configuration, external integrations, automation, or complete project-level Edge Function recovery. Source was retrieved while the source project was available.
+
 ## Capability matrix
 | Component | Supabase Cloud | Self-hosted | Proof required |
 |---|---|---|---|
@@ -94,7 +106,7 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
 - [ ] Storage export/restore with pagination and every object checksum
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
-- [ ] Edge Function source redeployed and invoked (authenticated invocation of pre-existing destination function passed; independent clean-target redeployment remains)
+- [x] Edge Function source redeployed and invoked (one synthetic function deployed to previously absent destination and authenticated HTTP 200 verified; independent offline source escrow, dependencies and secrets remain unverified)
 - [ ] Settings/secrets manual steps executed from independent recovery materials
 - [ ] Recovery time, recovery point and component consistency window measured
 - [ ] Corrupt backup, missing object and denied privilege tests fail closed
