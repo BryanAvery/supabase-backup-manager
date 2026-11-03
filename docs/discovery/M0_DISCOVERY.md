@@ -1,5 +1,5 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** An isolated Cloud PostgreSQL fixture backup and restore drill has passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture and manual single-object Storage recovery drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
 
 ## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
 
@@ -19,7 +19,21 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** An isolated Cloud Postg
 - Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
 - Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, Auth, Storage object bytes, Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
 
-**Next drill:** create synthetic Auth users and private Storage bucket objects only in the two disposable M0 projects; inventory metadata, test recoverability and verify sign-in and exact object bytes. Keep real user data and credentials out of evidence and Git.
+**Next drill:** demonstrate recovery of the existing synthetic Auth user into the independent disposable target, preserving identity and verifying sign-in; then expand Storage recovery to paginated bulk objects and denied-access tests. Keep real user data and credentials out of evidence and Git.
+
+## Executed Cloud Storage single-object recovery - 3 November 2026
+
+**Result: PASS for manual recovery of one private Storage object; full bucket backup/recovery remains unverified.**
+
+- Source: disposable Cloud project `qfcowkrbothbseswosjg`; destination: independent disposable Cloud project `fdlozdsycfeaxglwstjx`.
+- Source bucket `m0-backup-test` and destination bucket `m0-backup-test` were both verified in `storage.buckets` with `public = false`.
+- Object `recovery-test.txt` was verified in both projects' `storage.objects` metadata: 453 bytes, `text/plain`.
+- Operator downloaded the source object through the Supabase dashboard, retained a local copy, manually created the private destination bucket and uploaded that copy.
+- Source SHA-256: `01813332407a69e1a5683271b60ac0adce259932ff516632036d60efa3522842`.
+- Operator downloaded the destination object independently and calculated SHA-256: `01813332407a69e1a5683271b60ac0adce259932ff516632036d60efa3522842`.
+- **Byte-for-byte equality confirmed** by matching SHA-256 digests, with matching object size and bucket privacy.
+- Scope limitations: single-object manual operation only; no paginated enumeration, bulk export/restore, access-policy equivalence, denied anonymous access test, version handling, retention, automation, retry/resume, or RPO/RTO measurement. Private bucket metadata alone does not prove every access-control policy. No production data used.
+- Synthetic Auth user `m0-test@example.com` was separately confirmed in source `auth.users` with confirmed email. **No Auth restore or target sign-in has been demonstrated.**
 
 ## Capability matrix
 | Component | Supabase Cloud | Self-hosted | Proof required |
