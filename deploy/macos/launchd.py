@@ -9,6 +9,7 @@ The operator performs the reviewed, explicit launchctl steps in the runbook.
 from __future__ import annotations
 
 import argparse
+import grp
 import ipaddress
 import json
 import os
@@ -208,6 +209,12 @@ def audit(config: dict, spec: dict) -> None:
         raise ConfigError("service user must be non-root with a non-interactive login shell")
     if user.pw_uid in (0, 1):
         raise ConfigError("unsafe service account UID")
+    try:
+        admin = grp.getgrnam("admin")
+    except KeyError as e:
+        raise ConfigError("could not independently verify admin group membership") from e
+    if user.pw_gid == admin.gr_gid or user.pw_name in admin.gr_mem:
+        raise ConfigError("service user must not be in the macOS admin group")
 
     for folder, uid, perms in [
         (BASE, 0, 0o755),
