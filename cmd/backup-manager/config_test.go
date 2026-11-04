@@ -172,6 +172,23 @@ func TestVerifiedBearerOverTLSAndRevocation(t *testing.T){
 	if code!=200 || strings.Contains(string(body),p.ID){t.Fatalf("cross-project leak %d %s",code,body)}
 	code,body=do("GET","/api/v1/projects",tokenA,"",nil)
 	if code!=200 || !strings.Contains(string(body),p.ID){t.Fatalf("owner cannot see project %d %s",code,body)}
+	code,body=do("GET","/api/v1/me",tokenA,"",nil)
+	if code!=200 {t.Fatalf("verified identity check returned %d: %s",code,body)}
+	var me struct {
+		UserID string `json:"user_id"`
+		Subject string `json:"subject"`
+	}
+	if err:=json.Unmarshal(body,&me);err!=nil{t.Fatal(err)}
+	if me.UserID!="user-a" || me.Subject!="subject-a" {
+		t.Fatalf("API returned wrong verified OIDC identity: %+v",me)
+	}
+	if code,_:=do("GET","/api/v1/me",tokenA,"",map[string]string{"X-User-ID":"user-b"});code!=200 {
+		t.Fatalf("untrusted header changed authenticated subject response %d",code)
+	}
+	if code,_:=do("GET","/api/v1/me","","",nil);code!=401 {
+		t.Fatalf("unauthenticated identity request accepted %d",code)
+	}
+	
 	if code,_:=do("POST","/api/v1/projects",tokenB,`{"name":"Not allowed","environment":"cloud"}`,nil);code!=403{
 		t.Fatalf("nonadministrator created project %d",code)
 	}
