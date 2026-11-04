@@ -1,0 +1,25 @@
+{
+  "name": "supabase-backup-manager-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only, local TLS browser dashboard for the Supabase Backup Manager M1 foundation",
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json",
+    "build": "vite build",
+    "test": "tsc -p tsconfig.test.json && node --test tests/*.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
