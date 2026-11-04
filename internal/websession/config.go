@@ -87,6 +87,9 @@ func (c Config) validate() (string, error) {
 	if auth.Host != issuer.Host || token.Host != issuer.Host {
 		return "", errors.New("OIDC endpoints must be hosted on the pinned issuer host")
 	}
+	if issuer.Hostname() == callback.Hostname() {
+		return "", errors.New("the OIDC provider must not share the local browser-cookie hostname")
+	}
 	if c.ClientID == "" || c.APIAudience == "" || c.RequiredACR == "" ||
 		c.IDTokenKeyID == "" || c.IDTokenPublicKey == nil ||
 		c.IDTokenPublicKey.N.BitLen() < 2048 {
