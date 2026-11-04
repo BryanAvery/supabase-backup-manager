@@ -65,7 +65,7 @@ func issueToken(t *testing.T,key *rsa.PrivateKey,c accessClaims,typ string)strin
  return raw
 }
 func authorize(v *Verifier,raw string,secure bool)(string,error){
- r:=httptest.NewRequest(http.MethodGet,"https://localhost/api/v1/projects",nil)
+ r:=httptest.NewRequest(http.MethodGet,"http://localhost/api/v1/projects",nil)
  if secure{r.TLS=&tls.ConnectionState{Version:tls.VersionTLS13}}
  r.Header.Set("Authorization","Bearer "+raw)
  p,err:=v.Authenticate(r)
