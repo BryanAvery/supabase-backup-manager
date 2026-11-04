@@ -36,18 +36,29 @@ jobs:
           sudo apt-get install -y postgresql-client
           pg_dump --version
           pg_restore --version
-      - name: Run M0 fixture validation
+      - name: Run two complete recovery validation cycles
         shell: bash
         run: |
-          python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports
-      - name: Run Stage 2 security and integrity checks
+          set -euo pipefail
+          mkdir -p reports
+          for cycle in 1 2; do
+            echo "Starting recovery validation cycle $cycle"
+            python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports
+            latest=$(find reports -maxdepth 1 -name 'm0-20*.json' -type f -print | sort | tail -n 1)
+            test -n "$latest"
+            cp "$latest" "reports/cycle-$cycle-stage1.json"
+            python3 m0/stage2.py --output reports
+            cp reports/m0-stage2.json "reports/cycle-$cycle-stage2.json"
+          done
+      - name: Evaluate Stage 3 acceptance
+        if: always()
         shell: bash
-        run: python3 m0/stage2.py --output reports
+        run: python3 m0/stage3.py --reports reports
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: m0-validation-report
-          path: reports/m0-*.json
+          path: reports/*.json
           if-no-files-found: warn
           retention-days: 14
