@@ -80,6 +80,18 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
 - Same user's GET `images/binary-test.bin` returned HTTP **400** in status-only test; subsequent response-body inspection returned JSON `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`. Earlier destination SQL confirmed this object exists. The 404 is consistent with RLS-filtered access; note differing reported statuses between invocations.
 - **Scope:** one synthetic user, one policy, one permitted object, one denied object. Not proof of automated extraction, all policies, cross-user isolation, other verbs, service-role behaviour, policy portability or complete Storage recovery.
 
+## Executed controlled interrupted Storage restore and resume - 4 November 2026
+
+**Result: PASS for a deliberate two-object interruption, safe resume of two missing objects, and independently verified final destination bytes. Overall M0 remains NO-GO.**
+
+- Disposable destination project `fdlozdsycfeaxglwstjx`; new private bucket `m0-interrupted-restore-test`, verified private and initially empty.
+- Operator verified all four source-backup objects against the SHA-256/size manifest before any uploads. Uploaded `documents/test.txt` and `images/binary-test.bin` using `x-upsert: false`, then deliberately stopped before the other two objects. Output: `SIMULATED INTERRUPTION: Restore stopped after two objects`.
+- Independent read-only inspection downloaded and verified both existing objects. Requests for `nested/deep/data.json` and `recovery-test.txt` returned HTTP 400 with Storage API code `NoSuchKey` and message `Object not found`. The initial checker incorrectly treated only HTTP 404 as missing; a follow-up diagnostic established the actual API error semantics.
+- Resume script verified all four local files first; independently downloaded and checksum-verified the two existing destination objects, and treated only explicit `NoSuchKey` (HTTP 400/404) as missing. Unexpected errors or differing existing bytes caused refusal. It required exactly two existing and two missing objects before writing.
+- Output: `SKIP VERIFIED` for the two existing objects; `MISSING` and then `RESTORED` for the remaining two; `SUCCESS: Interrupted restore resumed`, `Existing verified objects preserved: 2`, `Missing objects uploaded: 2`.
+- Independent post-resume authenticated downloads and SHA-256/size comparisons: `PASS` for all four objects, `Verified: 4/4`, `SUCCESS: Interrupted restore fully recovered`.
+- **Limits:** this was a deliberately stopped upload sequence with manual invocation of an ad hoc resume script, not a process crash or actual network interruption. No automated retries/backoff, crash-safe persisted state, concurrency/race test, large-bucket completeness, exact destination enumeration or overwrite-conflict injection was demonstrated. Existing objects were verified and skipped, not overwritten. No production data or projects were involved.
+
 ## Executed Storage corruption detection and restore refusal - 3 November 2026
 
 **Result: PASS for local checksum corruption detection and isolated restore refusal; no network requests in restore refusal test.**
