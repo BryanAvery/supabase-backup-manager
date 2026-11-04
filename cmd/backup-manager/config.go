@@ -32,6 +32,7 @@ type serviceOptions struct {
 	browserLogin                            bool
 	oidcAuthorizeURL, oidcTokenURL, oidcRedirectURI string
 	oidcAPIScope, oidcIDKeyID, oidcIDPublicKey string
+	webAssetsDir string
 }
 
 func (o serviceOptions) check() error {
@@ -67,8 +68,9 @@ func (o serviceOptions) check() error {
 		}
 	} else if o.oidcAuthorizeURL != "" || o.oidcTokenURL != "" ||
 		o.oidcRedirectURI != "" || o.oidcAPIScope != "" ||
-		o.oidcIDKeyID != "" || o.oidcIDPublicKey != "" {
-		return errors.New("OIDC browser settings require -enable-browser-login")
+		o.oidcIDKeyID != "" || o.oidcIDPublicKey != "" ||
+		o.webAssetsDir != "" {
+		return errors.New("OIDC browser settings and dashboard assets require -enable-browser-login")
 	}
 	return nil
 }
@@ -184,6 +186,7 @@ func configuredHandler(ctx context.Context, o serviceOptions) (http.Handler, fun
 		AuthorizationURL: o.oidcAuthorizeURL, TokenURL: o.oidcTokenURL,
 		RedirectURI: o.oidcRedirectURI,
 		IDTokenKeyID: o.oidcIDKeyID, IDTokenPublicKey: idKey,
+		WebAssetsDir: o.webAssetsDir,
 	}, store, verifier, base)
 	if err != nil {
 		store.Close()

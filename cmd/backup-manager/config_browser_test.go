@@ -48,3 +48,18 @@ func TestBrowserSignInRequiresAllSecureOptions(t *testing.T){
 		})
 	}
 }
+
+func TestBrowserDashboardRequiresCompleteOIDCAndTLS(t *testing.T) {
+	good:=completeBrowserFixtureOptions()
+	good.webAssetsDir="/private/build/dist"
+	if err:=good.check();err!=nil{t.Fatalf("valid dashboard settings refused: %v",err)}
+	withoutLogin:=good
+	withoutLogin.browserLogin=false
+	if err:=withoutLogin.check();err==nil{t.Fatal("dashboard assets allowed without OIDC login")}
+	withoutTLS:=good
+	withoutTLS.tlsCert=""
+	if err:=withoutTLS.check();err==nil{t.Fatal("dashboard assets allowed without complete TLS")}
+	withoutMFAPolicy:=good
+	withoutMFAPolicy.requiredACR=""
+	if err:=withoutMFAPolicy.check();err==nil{t.Fatal("dashboard assets allowed without verified MFA requirement")}
+}

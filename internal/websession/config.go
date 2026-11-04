@@ -41,6 +41,8 @@ type Config struct {
 	IDTokenPublicKey *rsa.PublicKey
 	// HTTPClient is only overridden by tests with synthetic TLS IdPs.
 	HTTPClient *http.Client
+	// WebAssetsDir optionally serves a verified Vite production build on /app/.
+	WebAssetsDir string
 }
 
 type Handler struct {
@@ -50,6 +52,7 @@ type Handler struct {
 	base http.Handler
 	client *http.Client
 	origin string
+	assets *staticAssets
 	pending map[string]pendingLogin
 	sessions map[string]browserSession
 	mu syncMutex
@@ -122,8 +125,13 @@ func NewHandler(c Config, store Store, bearer server.Authenticator, base http.Ha
 	}
 	// A provider must never redirect an authorisation code to another host.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	var assets *staticAssets
+	if c.WebAssetsDir!="" {
+		assets,err=loadAssets(c.WebAssetsDir)
+		if err!=nil{return nil,fmt.Errorf("load private dashboard assets: %w",err)}
+	}
 	h := &Handler{config:c, store:store, bearer:bearer, base:base,
-		client:client, origin:origin,
+		client:client, origin:origin, assets:assets,
 		pending:make(map[string]pendingLogin), sessions:make(map[string]browserSession)}
 	return server.LimitRequests(http.HandlerFunc(h.serve), 120, time.Minute), nil
 }

@@ -79,16 +79,23 @@ func putCookie(w http.ResponseWriter,name,value string,maxAge int) {
 func clearCookie(w http.ResponseWriter,name string){putCookie(w,name,"",-1)}
 
 func(h *Handler)serve(w http.ResponseWriter,r *http.Request){
-	if !strings.HasPrefix(r.URL.Path,"/web/"){
+	webRoute:=strings.HasPrefix(r.URL.Path,"/web/")
+	appRoute:=h.assets!=nil && (r.URL.Path=="/app" ||
+		r.URL.Path=="/app/" || strings.HasPrefix(r.URL.Path,"/app/assets/"))
+	if !webRoute && !appRoute {
 		h.base.ServeHTTP(w,r)
 		return
 	}
 	securityHeaders(w)
-	// Check the actual local TLS channel and exact host. Never accept
-	// X-Forwarded-Proto or proxy headers as equivalent to real TLS.
+	// Both browser APIs and static assets require actual TLS and the exact
+	// configured loopback host; no reverse-proxy headers are trusted.
 	redir,_:=url.Parse(h.config.RedirectURI)
 	if r.TLS==nil || r.TLS.Version<tls.VersionTLS13 || r.Host!=redir.Host {
 		jsonError(w,http.StatusForbidden);return
+	}
+	if appRoute{
+		h.serveAssets(w,r)
+		return
 	}
 	switch r.URL.Path {
 	case "/web/login":h.begin(w,r)
@@ -194,7 +201,9 @@ func(h *Handler)complete(w http.ResponseWriter,r *http.Request){
 	seconds:=int(time.Until(end).Seconds())
 	if seconds<1{seconds=1}
 	putCookie(w,sessionCookie,sessionID,seconds)
-	http.Redirect(w,r,"/web/session",http.StatusSeeOther)
+	destination:="/web/session"
+	if h.assets!=nil{destination="/app/"}
+	http.Redirect(w,r,destination,http.StatusSeeOther)
 }
 
 func(h *Handler)activeSession(r *http.Request)(browserSession,bool){

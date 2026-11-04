@@ -121,6 +121,10 @@ type browserFixture struct{
 	client *http.Client
 }
 func makeFixture(t *testing.T)*browserFixture{
+	return makeFixtureWithAssets(t,"")
+}
+
+func makeFixtureWithAssets(t *testing.T,assetsDir string)*browserFixture{
 	t.Helper()
 	key,err:=rsa.GenerateKey(rand.Reader,2048)
 	if err!=nil{t.Fatal(err)}
@@ -162,7 +166,7 @@ func makeFixture(t *testing.T)*browserFixture{
 		AuthorizationURL:idp.URL+"/authorize",TokenURL:idp.URL+"/token",
 		RedirectURI:app.URL+"/web/auth/callback",
 		IDTokenKeyID:"fixture-kid",IDTokenPublicKey:&key.PublicKey,
-		HTTPClient:idp.Client(),
+		HTTPClient:idp.Client(),WebAssetsDir:assetsDir,
 	}
 	h,err=NewHandler(config,store,v,http.NotFoundHandler())
 	if err!=nil{t.Fatal(err)}
@@ -417,5 +421,26 @@ func TestOIDCProviderCannotShareSessionCookieHostname(t *testing.T){
 	}
 	if _,err:=cfg.validate();err==nil {
 		t.Fatal("provider could receive host-only local application session cookies")
+	}
+}
+
+func TestSuccessfulOIDCCallbackReturnsToSameOriginDashboard(t *testing.T){
+	f:=makeFixtureWithAssets(t,fixtureAssets(t))
+	state,_,binding:=f.start(t)
+	response,body:=f.callback(t,state,binding)
+	if response.StatusCode!=http.StatusSeeOther{
+		t.Fatalf("valid browser callback failed %d: %s",response.StatusCode,body)
+	}
+	if response.Header.Get("Location")!="/app/"{
+		t.Fatalf("callback did not redirect to private dashboard: %q",response.Header.Get("Location"))
+	}
+	session:=cookieByName(t,response,sessionCookie)
+	response,body=f.do(t,"GET","/web/session",[]*http.Cookie{session},nil)
+	if response.StatusCode!=http.StatusOK || !strings.Contains(string(body),`"authenticated":true`){
+		t.Fatalf("dashboard session not established: %d %s",response.StatusCode,body)
+	}
+	response,body=f.do(t,"GET","/app/",[]*http.Cookie{session},nil)
+	if response.StatusCode!=http.StatusOK || !strings.Contains(string(body),`id="root"`){
+		t.Fatalf("authenticated browser could not load dashboard: %d %s",response.StatusCode,body)
 	}
 }

@@ -1,0 +1,60 @@
+name: M1 React browser dashboard
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'internal/websession/**'
+      - 'cmd/backup-manager/**'
+      - '.github/workflows/m1-web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'internal/websession/**'
+      - 'cmd/backup-manager/**'
+      - '.github/workflows/m1-web.yml'
+permissions:
+  contents: read
+jobs:
+  browser-dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record runtime version
+        run: |
+          node --version
+          npm --version
+      - name: Install integrity-pinned dependencies from committed lockfile
+        working-directory: web
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Strict TypeScript contract checks
+        working-directory: web
+        run: npm run check
+      - name: Negative-path session and CSRF tests
+        working-directory: web
+        run: npm test
+      - name: Compile React static production assets
+        working-directory: web
+        run: npm run build
+      - name: Confirm static output includes no server-side secrets
+        run: |
+          test -f web/dist/index.html
+          test -d web/dist/assets
+          grep -q '/app/assets/' web/dist/index.html
+          test "$(find web/dist/assets -type f | wc -l)" -ge 1
+          if grep -R -i -E 'client_secret|service_role|SUPABASE_SERVICE_ROLE_KEY' web/dist; then
+            echo 'Unexpected privileged secret marker in browser bundle'
+            exit 1
+          fi
+      - name: Upload browser build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-browser-dashboard
+          path: |
+            web/dist
+            web/package-lock.json
+          retention-days: 7
