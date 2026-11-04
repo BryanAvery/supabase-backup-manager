@@ -9,6 +9,7 @@ import (
  "regexp"
  "strings"
  "unicode/utf8"
+ "time"
 
  "github.com/BryanAvery/supabase-backup-manager/internal/catalogue"
 )
@@ -17,6 +18,8 @@ import (
 type Principal struct {
  UserID string
  CanProvisionProjects bool
+ TokenDigest string
+ TokenExpiresAt time.Time
 }
 type Authenticator interface { Authenticate(*http.Request)(Principal,error) }
 type denyAllAuthenticator struct{}
@@ -38,7 +41,8 @@ func NewCatalogueHandler(store catalogue.ProjectRepository,auth Authenticator)ht
  mux.Handle("/api/v1/health",healthHandler())
  mux.HandleFunc("/api/v1/projects",a.authorise(a.projects))
  mux.HandleFunc("/api/v1/projects/",a.authorise(a.capabilities))
- return withSecurityHeaders(mux)
+ mux.HandleFunc("/api/v1/sessions/revoke",a.authorise(a.revokeSession))
+ return withSecurityHeaders(limitRequests(mux,120,time.Minute))
 }
 func(a *projectAPI)authorise(next func(http.ResponseWriter,*http.Request,Principal))http.HandlerFunc{
  return func(w http.ResponseWriter,r *http.Request){
@@ -62,6 +66,11 @@ func(a *projectAPI)projects(w http.ResponseWriter,r *http.Request,actor Principa
   // CSRF/browser write protection is part of M1-04. No browser writes yet.
   if r.Header.Get("Origin")!=""{apiError(w,http.StatusForbidden,"browser_mutations_not_enabled");return}
   if !actor.CanProvisionProjects{apiError(w,http.StatusForbidden,"insufficient_permissions");return}
+  // The local catalogue is the source of truth. Token role claims or
+  // previously issued permissions cannot override a revoked admin grant.
+  admin,err:=a.store.IsInstanceAdministrator(r.Context(),actor.UserID)
+  if err!=nil{apiError(w,http.StatusInternalServerError,"catalogue_error");return}
+  if !admin{apiError(w,http.StatusForbidden,"insufficient_permissions");return}
   contentType,_,err:=mime.ParseMediaType(r.Header.Get("Content-Type"))
   if err!=nil || contentType!="application/json"{
    apiError(w,http.StatusUnsupportedMediaType,"json_required");return
@@ -120,4 +129,21 @@ func apiJSON(w http.ResponseWriter,status int,v any){
 }
 func apiError(w http.ResponseWriter,status int,code string){
  apiJSON(w,status,struct{Error string `json:"error"`}{code})
+}
+
+func(a *projectAPI)revokeSession(w http.ResponseWriter,r *http.Request,actor Principal){
+ if r.Method!=http.MethodPost{
+  w.Header().Set("Allow","POST")
+  apiError(w,http.StatusMethodNotAllowed,"method_not_allowed");return
+ }
+ if r.Header.Get("Origin")!="" || r.Header.Get("Sec-Fetch-Site")=="cross-site"{
+  apiError(w,http.StatusForbidden,"browser_mutations_not_enabled");return
+ }
+ if actor.TokenDigest=="" || actor.TokenExpiresAt.IsZero(){
+  apiError(w,http.StatusForbidden,"token_revocation_not_available");return
+ }
+ if err:=a.store.RevokeAccessToken(r.Context(),actor.TokenDigest,actor.TokenExpiresAt);err!=nil{
+  apiError(w,http.StatusInternalServerError,"revocation_failed");return
+ }
+ w.WriteHeader(http.StatusNoContent)
 }
