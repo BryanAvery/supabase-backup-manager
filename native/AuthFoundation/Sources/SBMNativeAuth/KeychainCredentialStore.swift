@@ -49,7 +49,7 @@ public final class KeychainCredentialStore: CredentialStorage {
         var attributes = query()
         attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        attributes[kSecAttrSynchronizable as String] = kCFBooleanFalse
+        attributes[kSecAttrSynchronizable as String] = false
         let status = SecItemAdd(attributes as CFDictionary, nil)
         if status == errSecDuplicateItem {
             let update = [kSecValueData as String: data]
