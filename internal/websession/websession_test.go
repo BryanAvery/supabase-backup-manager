@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -145,6 +146,12 @@ func makeFixture(t *testing.T)*browserFixture{
 	app:=httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
 		h.ServeHTTP(w,r)
 	}))
+	// Use a different host to the synthetic provider: cookies are scoped
+	// by hostname, never by TCP port. The httptest certificate covers ::1.
+	listener,err:=net.Listen("tcp6","[::1]:0")
+	if err!=nil{t.Fatal("IPv6 loopback required for isolated OIDC browser test: ",err)}
+	_ =app.Listener.Close()
+	app.Listener=listener
 	app.TLS=&tls.Config{MinVersion:tls.VersionTLS13}
 	app.StartTLS()
 	t.Cleanup(app.Close)
