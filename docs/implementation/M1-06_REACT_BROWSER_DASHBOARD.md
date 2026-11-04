@@ -26,7 +26,7 @@ npm test
 npm run build
 ```
 
-The build must create `web/dist/index.html` and hashed `web/dist/assets/*.js` / `*.css`. Only serve this production build; the Vite development server is **not** suitable for secure authenticated deployment. If a reviewed lockfile is not yet present, generate it using `npm install --package-lock-only` and commit it before using `npm ci`.
+The build must create `web/dist/index.html` and hashed `web/dist/assets/*.js` / `*.css`. Only serve this production build; the Vite development server is **not** suitable for secure authenticated deployment. The committed `web/package-lock.json` pins and integrity-checks the full dependency tree. CI installs exactly those packages with `npm ci`.
 
 To make the UI available, an operator must first securely configure the Go daemon as documented in `docs/implementation/M1-04B_TLS_BEARER.md` and `docs/implementation/M1-04B_OIDC_BROWSER_SESSIONS.md`, then add:
 
