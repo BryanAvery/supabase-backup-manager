@@ -7,13 +7,14 @@ from pathlib import Path
 import sys
 
 REQUIRED_STAGE1 = {
-    "source schema exists", "reset managed target fixture", "target schema absent",
+    "distinct database identities", "source schema exists", "reset managed target fixture", "target schema absent",
     "backup", "archive readable", "restore", "mark managed fixture",
     "schema fingerprint", "table row counts", "RLS flags", "RLS policies"
 }
 REQUIRED_STAGE2 = {
     "schema and table ACLs", "role privilege matrix", "full fixture row contents",
-    "sequence states", "authenticated RLS denied-row behaviour"
+    "sequence states", "authenticated RLS denied-row behaviour",
+    "restricted and privileged RLS behaviour"
 }
 
 def load(path):
