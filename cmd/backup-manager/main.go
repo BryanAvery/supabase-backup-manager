@@ -56,6 +56,7 @@ func run() error {
 	flag.StringVar(&o.oidcAPIScope, "oidc-api-scope", "", "registered API scope, excluding openid and offline_access")
 	flag.StringVar(&o.oidcIDKeyID, "oidc-id-key-id", "", "pinned ID-token signing key ID")
 	flag.StringVar(&o.oidcIDPublicKey, "oidc-id-public-key", "", "pinned ID-token RSA PUBLIC KEY PEM")
+	flag.StringVar(&o.webAssetsDir, "web-assets-dir", "", "absolute path to a private Vite production dist directory (requires browser login)")
 
 	flag.Parse()
 
