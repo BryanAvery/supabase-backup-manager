@@ -1,0 +1,50 @@
+name: M0 backup and restore validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m0-recovery-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate isolated recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: m0-recovery
+    env:
+      M0_SOURCE_URL: ${{ secrets.M0_SOURCE_URL }}
+      M0_TARGET_URL: ${{ secrets.M0_TARGET_URL }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Check required secrets
+        shell: bash
+        run: |
+          if [[ -z "$M0_SOURCE_URL" || -z "$M0_TARGET_URL" ]]; then
+            echo "::error::Configure M0_SOURCE_URL and M0_TARGET_URL as environment secrets."
+            exit 1
+          fi
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pg_dump --version
+          pg_restore --version
+      - name: Run M0 fixture validation
+        shell: bash
+        run: |
+          python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m0-validation-report
+          path: reports/m0-*.json
+          if-no-files-found: warn
+          retention-days: 14
