@@ -36,7 +36,9 @@ jobs:
           sudo apt-get install -y postgresql-client
           pg_dump --version
           pg_restore --version
-      - name: Bootstrap isolated source fixture (create only if absent)\n        run: python3 m0/bootstrap_source.py\n      - name: Run two complete recovery validation cycles
+      - name: Bootstrap isolated source fixture (create only if absent)
+        run: python3 m0/bootstrap_source.py
+      - name: Run two complete recovery validation cycles
         shell: bash
         run: |
           set -euo pipefail
