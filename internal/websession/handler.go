@@ -22,6 +22,7 @@ type pendingLogin struct {
 type browserSession struct {
 	userID, subjectKey, tokenDigest, csrf string
 	expires time.Time
+	accessExpires time.Time
 }
 
 func randomValue() (string,error) {
@@ -179,7 +180,7 @@ func(h *Handler)complete(w http.ResponseWriter,r *http.Request){
 	csrf,err:=randomValue();if err!=nil{jsonError(w,500);return}
 	s:=browserSession{
 		userID:principal.UserID,subjectKey:subjectKey,tokenDigest:principal.TokenDigest,
-		csrf:csrf,expires:end,
+		csrf:csrf,expires:end,accessExpires:principal.TokenExpiresAt,
 	}
 	now:=time.Now()
 	h.mu.Lock()
@@ -250,7 +251,7 @@ func(h *Handler)logout(w http.ResponseWriter,r *http.Request){
 		jsonError(w,http.StatusForbidden);return
 	}
 	// Revoke the API access token as well as the in-memory browser session.
-	err:=h.store.RevokeAccessToken(r.Context(),s.tokenDigest,s.expires)
+	err:=h.store.RevokeAccessToken(r.Context(),s.tokenDigest,s.accessExpires)
 	raw:=stateCookieValue(r,sessionCookie)
 	h.mu.Lock()
 	delete(h.sessions,digest(raw))
