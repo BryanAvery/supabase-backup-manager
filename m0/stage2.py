@@ -116,6 +116,30 @@ def main():
             raise AssertionError("Expected fixture denied-row result was not observed")
         return {"authenticated_visible_rows": 0}
     check("authenticated RLS denied-row behaviour", rls_behaviour)
+    def role_visibility():
+        # Read-only impersonation: verify both restricted roles and the
+        # privileged fixture baseline, on source and recovery.
+        privileged = []
+        for url in (args.source_url, args.target_url):
+            privileged.append(int(sql(url, "SELECT count(*) FROM m0_fixture.parent")))
+        if privileged[0] != privileged[1] or privileged[0] < 1:
+            raise AssertionError("Fixture must contain matching non-empty privileged baseline")
+        results = {}
+        for role in ("anon", "authenticated"):
+            counts = []
+            for url in (args.source_url, args.target_url):
+                statement = ("BEGIN; SET LOCAL ROLE " + role +
+                             "; SELECT count(*) FROM m0_fixture.parent; ROLLBACK;")
+                lines = sql(url, statement).splitlines()
+                numbers = [int(line.strip()) for line in lines if line.strip().isdigit()]
+                if len(numbers) != 1:
+                    raise AssertionError("Unexpected impersonated-role query result for " + role)
+                counts.append(numbers[0])
+            if counts[0] != counts[1] or counts[0] != 0:
+                raise AssertionError(role + " must see zero fixture rows in both databases")
+            results[role] = counts[0]
+        return {"privileged_rows": privileged[0], "restricted_role_rows": results}
+    check("restricted and privileged RLS behaviour", role_visibility)
     report["status"] = "PASS" if all(x["status"] == "PASS" for x in report["checks"]) else "FAIL"
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
