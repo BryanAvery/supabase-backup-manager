@@ -102,8 +102,9 @@ struct SupabaseBackupManagerApp: App {
     @StateObject private var coordinator = ApplicationCoordinator()
 
     var body: some Scene {
-        WindowGroup("Supabase Backup Manager") {
+        Window("Supabase Backup Manager", id: "main") {
             DesktopRootView(coordinator: coordinator)
         }
+        .defaultSize(width: 960, height: 640)
     }
 }
