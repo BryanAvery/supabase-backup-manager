@@ -22,3 +22,9 @@ DerivedData/
 .idea/
 .vscode/
 coverage/
+
+# Local Swift/Xcode build output (XcodeGen recreates the project)
+.build/
+*.xcresult/
+native/DesktopApp/SupabaseBackupManager.xcodeproj/
+native/DesktopApp/Generated/
