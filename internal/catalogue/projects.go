@@ -3,6 +3,9 @@ package catalogue
 import (
  "context"
  "crypto/rand"
+ "crypto/sha256"
+ "encoding/hex"
+ "encoding/json"
  "database/sql"
  "errors"
  "fmt"
@@ -106,13 +109,28 @@ func(s *Store) CreateProject(ctx context.Context,actorID,name,environment string
  if active!=1{return Project{},ErrActorUnavailable}
  if _,err:=tx.ExecContext(ctx,"INSERT INTO projects(id,name,environment,owner_user_id,created_at) VALUES(?,?,?,?,?)",id,name,environment,actorID,now);err!=nil{return Project{},err}
  if _,err:=tx.ExecContext(ctx,"INSERT INTO project_members(project_id,user_id,role) VALUES(?,?,'administrator')",id,actorID);err!=nil{return Project{},err}
- // A baseline audit event. Full tamper-evident chaining and auditing denials
- // remain M1-04 security work; no success is recorded if the transaction fails.
+ // Chained audit hash for this mutation. External anchoring, independent
+ // chain verification and access-denial auditing are follow-ups for M1-04.
+ var previous sql.NullString
+ scanErr:=tx.QueryRowContext(ctx,"SELECT event_hash FROM audit_events ORDER BY rowid DESC LIMIT 1").Scan(&previous)
+ if scanErr!=nil && !errors.Is(scanErr,sql.ErrNoRows){return Project{},scanErr}
+ prevHash:=""
+ if previous.Valid{prevHash=previous.String}
+ payload,err:=json.Marshal(struct{
+  Prev string `json:"prev"`
+  EventID string `json:"event_id"`
+  ProjectID string `json:"project_id"`
+  ActorID string `json:"actor_id"`
+  Action string `json:"action"`
+  At string `json:"at"`
+ }{prevHash,auditID,id,actorID,"project.created",now})
+ if err!=nil{return Project{},err}
+ sum:=sha256.Sum256(payload)
  if _,err:=tx.ExecContext(ctx,`INSERT INTO audit_events(
  id,project_id,actor_id,action,target_type,target_id,result,request_id,
- event_at,event_hash,metadata_redacted_json
- ) VALUES(?,?,?,'project.created','project',?,'success',?,?,?,'{}')`,
- auditID,id,actorID,id,auditID,now,"pending-chain-"+auditID);err!=nil{return Project{},err}
+ event_at,previous_hash,event_hash,metadata_redacted_json
+ ) VALUES(?,?,?,'project.created','project',?,'success',?,?,?,?,'{}')`,
+ auditID,id,actorID,id,auditID,now,prevHash,hex.EncodeToString(sum[:]));err!=nil{return Project{},err}
  if err:=tx.Commit();err!=nil{return Project{},err}
  return Project{ID:id,Name:name,Environment:environment,Readiness:"unknown"},nil
 }
