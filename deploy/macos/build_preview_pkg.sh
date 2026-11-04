@@ -127,7 +127,7 @@ if grep -Ei '(LaunchDaemons|/private/|\.key$|\.pem$|\.sqlite$|/Scripts/)' "$FILE
   exit 2
 fi
 
-/usr/bin/shasum -a 256 "$PKG_PATH" | /usr/bin/awk '{print $1 "  " $2}' > "$OUTPUT/SHA256SUMS"
+(cd "$OUTPUT" && /usr/bin/shasum -a 256 "$PACKAGE" > SHA256SUMS)
 cat > "$OUTPUT/READ-ME-FIRST.txt" <<EOF
 Supabase Backup Manager - unsigned macOS arm64 preview installer
 Git commit: $COMMIT
