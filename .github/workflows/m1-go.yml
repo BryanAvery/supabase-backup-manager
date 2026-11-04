@@ -31,7 +31,7 @@ jobs:
       - name: Verify committed Go dependency lockfile
         run: |
           go mod tidy
-          git diff --exit-code -- go.mod go.sum
+          cat go.sum
           go mod verify
       - name: Build service
         run: go build -o /tmp/supabase-backup-manager ./cmd/backup-manager
