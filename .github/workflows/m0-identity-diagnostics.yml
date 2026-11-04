@@ -1,0 +1,25 @@
+name: M0 read-only connection diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Inspect database connections (no writes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: m0-recovery
+    env:
+      M0_SOURCE_URL: ${{ secrets.M0_SOURCE_URL }}
+      M0_TARGET_URL: ${{ secrets.M0_TARGET_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Compare connection identity (read only)
+        run: python3 m0/diagnose_identity.py
