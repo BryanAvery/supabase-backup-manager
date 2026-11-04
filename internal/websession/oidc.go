@@ -1,6 +1,7 @@
 package websession
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -88,8 +89,15 @@ func(h *Handler)exchange(r *http.Request, code string, pending pendingLogin)(ser
 	if resp.StatusCode!=http.StatusOK || mediaErr!=nil || media!="application/json" {
 		return server.Principal{},"",time.Time{},errors.New("unexpected OIDC token endpoint response")
 	}
+	if resp.ContentLength > 16384 {
+		return server.Principal{},"",time.Time{},errors.New("token response too large")
+	}
+	raw,err:=io.ReadAll(io.LimitReader(resp.Body,16385))
+	if err!=nil || len(raw)>16384 {
+		return server.Principal{},"",time.Time{},errors.New("token response exceeds size limit")
+	}
 	var tokens exchangedTokens
-	dec:=json.NewDecoder(io.LimitReader(resp.Body,16385))
+	dec:=json.NewDecoder(bytes.NewReader(raw))
 	if err:=dec.Decode(&tokens);err!=nil{
 		return server.Principal{},"",time.Time{},errors.New("malformed token response")
 	}
