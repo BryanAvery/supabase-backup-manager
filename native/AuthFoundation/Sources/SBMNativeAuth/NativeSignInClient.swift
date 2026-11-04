@@ -46,6 +46,35 @@ public final class StrictTLSHTTPClient: SecureHTTPTransport {
     }
 }
 
+/// Contract-checked representation of the M1 project-list response.
+public enum ProjectEnvironment: String, Codable, Sendable {
+    case cloud
+    case selfHosted = "self_hosted"
+}
+
+public enum ProjectReadiness: String, Codable, Sendable {
+    case recoverable
+    case manualSteps = "manual_steps"
+    case atRisk = "at_risk"
+    case unknown
+}
+
+public struct ProjectSummary: Decodable, Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let name: String
+    public let environment: ProjectEnvironment
+    public let readiness: ProjectReadiness?
+
+    public init(id: UUID, name: String,
+                environment: ProjectEnvironment,
+                readiness: ProjectReadiness?) {
+        self.id = id
+        self.name = name
+        self.environment = environment
+        self.readiness = readiness
+    }
+}
+
 public struct NativeIdentity {
     public let userID: String
     public let subject: String
@@ -174,6 +203,33 @@ public final class NativeSignInClient {
         }
         guard status == 200 else { throw NativeAuthError.invalidServerResponse }
         return body
+    }
+
+    /// On app relaunch, recheck the stored token against the live Go verifier.
+    /// No previous user or project state is trusted from local preferences.
+    public func restoreSession() async throws -> NativeIdentity? {
+        guard let credential = try credentials.load() else { return nil }
+        let (body, status) = try await authenticatedRequest(
+            path: "me", token: credential.accessToken, method: "GET"
+        )
+        if status == 401 || status == 403 {
+            try credentials.clear()
+            throw NativeAuthError.unauthorised
+        }
+        guard status == 200,
+              let user = try? JSONDecoder().decode(WhoAmI.self, from: body),
+              !user.user_id.isEmpty, !user.subject.isEmpty else {
+            throw NativeAuthError.invalidServerResponse
+        }
+        return NativeIdentity(userID: user.user_id, subject: user.subject,
+                              expiresAt: credential.expiresAt)
+    }
+
+    /// The first M1 desktop shell is read-only. Strictly decode the SRS/OpenAPI
+    /// project contract; never substitute fixture projects on network failure.
+    public func authorisedProjects() async throws -> [ProjectSummary] {
+        let data = try await authorisedProjectsJSON()
+        return try JSONDecoder().decode([ProjectSummary].self, from: data)
     }
 
     /// Always clears local credentials. Returns false if the server could not
