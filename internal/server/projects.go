@@ -64,7 +64,7 @@ func(a *projectAPI)projects(w http.ResponseWriter,r *http.Request,actor Principa
   apiJSON(w,http.StatusOK,projects)
  case http.MethodPost:
   // CSRF/browser write protection is part of M1-04. No browser writes yet.
-  if r.Header.Get("Origin")!=""{apiError(w,http.StatusForbidden,"browser_mutations_not_enabled");return}
+  if r.Header.Get("Origin")!="" || r.Header.Get("Sec-Fetch-Site")=="cross-site"{apiError(w,http.StatusForbidden,"browser_mutations_not_enabled");return}
   if !actor.CanProvisionProjects{apiError(w,http.StatusForbidden,"insufficient_permissions");return}
   // The local catalogue is the source of truth. Token role claims or
   // previously issued permissions cannot override a revoked admin grant.
