@@ -17,6 +17,7 @@ import (
 // Principal is supplied only by a server-side credential verifier, never by headers.
 type Principal struct {
  UserID string
+ Subject string
  CanProvisionProjects bool
  TokenDigest string
  TokenExpiresAt time.Time
@@ -42,6 +43,7 @@ func NewCatalogueHandler(store catalogue.ProjectRepository,auth Authenticator)ht
  mux.HandleFunc("/api/v1/projects",a.authorise(a.projects))
  mux.HandleFunc("/api/v1/projects/",a.authorise(a.capabilities))
  mux.HandleFunc("/api/v1/sessions/revoke",a.authorise(a.revokeSession))
+ mux.HandleFunc("/api/v1/me",a.authorise(a.me))
  return withSecurityHeaders(limitRequests(mux,120,time.Minute))
 }
 func(a *projectAPI)authorise(next func(http.ResponseWriter,*http.Request,Principal))http.HandlerFunc{
@@ -146,4 +148,22 @@ func(a *projectAPI)revokeSession(w http.ResponseWriter,r *http.Request,actor Pri
   apiError(w,http.StatusInternalServerError,"revocation_failed");return
  }
  w.WriteHeader(http.StatusNoContent)
+}
+
+// me returns the identity associated with the *verified* bearer token.
+// It never accepts a subject value from a user-supplied HTTP header.
+func(a *projectAPI) me(w http.ResponseWriter,r *http.Request, actor Principal) {
+	if r.Method!=http.MethodGet{
+		w.Header().Set("Allow","GET")
+		apiError(w,http.StatusMethodNotAllowed,"method_not_allowed")
+		return
+	}
+	if actor.Subject==""{
+		apiError(w,http.StatusUnauthorized,"authentication_required")
+		return
+	}
+	apiJSON(w,http.StatusOK,struct{
+		UserID string `json:"user_id"`
+		Subject string `json:"subject"`
+	}{UserID:actor.UserID,Subject:actor.Subject})
 }

@@ -109,6 +109,7 @@ func(v *Verifier) Authenticate(r *http.Request)(server.Principal,error){
  }
  return server.Principal{
   UserID:actor.UserID,
+  Subject:claims.Subject,
   CanProvisionProjects:actor.InstanceAdministrator,
   TokenDigest:tokenDigest,
   TokenExpiresAt:claims.ExpiresAt.Time,

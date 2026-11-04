@@ -1,0 +1,32 @@
+name: M1 native macOS authentication
+on:
+  pull_request:
+    paths:
+      - 'native/AuthFoundation/**'
+      - '.github/workflows/m1-native-auth.yml'
+      - 'internal/server/projects.go'
+      - 'internal/identity/verifier.go'
+  push:
+    branches: [main]
+    paths:
+      - 'native/AuthFoundation/**'
+      - '.github/workflows/m1-native-auth.yml'
+      - 'internal/server/projects.go'
+      - 'internal/identity/verifier.go'
+permissions:
+  contents: read
+jobs:
+  swift-auth-tests:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture macOS and Swift toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcrun swift --version
+      - name: Build standalone native authentication package
+        run: xcrun swift build --package-path native/AuthFoundation
+      - name: Test native PKCE, RSA signatures and identity binding
+        run: xcrun swift test --package-path native/AuthFoundation --parallel
