@@ -403,3 +403,19 @@ func TestLogoutRevocationCoversFullAccessTokenLifetime(t *testing.T){
 		t.Fatalf("revocation expired too early, before bearer token's actual expiry: %v",expiry)
 	}
 }
+
+func TestOIDCProviderCannotShareSessionCookieHostname(t *testing.T){
+	f:=makeFixture(t)
+	cfg:=Config{
+		Issuer:f.provider.issuer,ClientID:"synthetic-client",
+		APIAudience:"api://synthetic-resource",APIScope:"api.read",
+		RequiredACR:"urn:synthetic:mfa",
+		AuthorizationURL:f.idp.URL+"/authorize",
+		TokenURL:f.idp.URL+"/token",
+		RedirectURI:"https://127.0.0.1:8765/web/auth/callback",
+		IDTokenKeyID:"fixture-kid",IDTokenPublicKey:&f.provider.signingKey.PublicKey,
+	}
+	if _,err:=cfg.validate();err==nil {
+		t.Fatal("provider could receive host-only local application session cookies")
+	}
+}
