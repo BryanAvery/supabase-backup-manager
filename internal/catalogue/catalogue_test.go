@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,7 +178,58 @@ func TestRejectUnsafePaths(t *testing.T) {
 	if err := store.Backup(ctx, store.pathForTests()); err == nil {
 		t.Fatal("source overwritten by snapshot")
 	}
-	if err := store.Backup(ctx, "relative.sqlite"); !errors.Is(err, os.ErrNotExist) && err == nil {
+	if err := store.Backup(ctx, "relative.sqlite"); err == nil {
 		t.Fatal("relative snapshot path accepted")
+	}
+}
+
+func TestSnapshotAllowsRollbackToOlderSchemaOnCopy(t *testing.T) {
+	ctx := context.Background()
+	store := testStore(t)
+	if _, err := store.db.ExecContext(ctx,
+		"INSERT INTO users(id,display_name,created_at) VALUES('rollback-user','Before Upgrade','2026-11-04T00:00:00Z')"); err != nil {
+		t.Fatal(err)
+	}
+	backupPath := filepath.Join(t.TempDir(), "pre-upgrade.sqlite")
+	if err := store.Backup(ctx, backupPath); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a later committed migration without altering the embedded baseline.
+	migrations, err := embeddedMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlText := "CREATE TABLE upgrade_only (id TEXT PRIMARY KEY)"
+	hash := sha256.Sum256([]byte(sqlText))
+	migrations = append(migrations, migration{
+		version: "0002_new_feature",
+		sql: sqlText, checksum: hex.EncodeToString(hash[:]),
+	})
+	if err := applyMigrations(ctx, store.db, migrations); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := store.db.QueryRowContext(ctx,
+		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
+		t.Fatalf("upgraded migration count %d: %v", count, err)
+	}
+	// A complete snapshot, rather than reverse SQL, is the rollback source.
+	rollback, err := Open(ctx, backupPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollback.Close()
+	if err := rollback.db.QueryRowContext(ctx,
+		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("snapshot did not preserve previous schema version: %d, %v", count, err)
+	}
+	if err := rollback.db.QueryRowContext(ctx,
+		"SELECT count(*) FROM sqlite_master WHERE name='upgrade_only'").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("future table leaked into rollback snapshot: %d, %v", count, err)
+	}
+	var name string
+	if err := rollback.db.QueryRowContext(ctx,
+		"SELECT display_name FROM users WHERE id='rollback-user'").Scan(&name); err != nil || name != "Before Upgrade" {
+		t.Fatalf("rollback snapshot lost original row: %q, %v", name, err)
 	}
 }
