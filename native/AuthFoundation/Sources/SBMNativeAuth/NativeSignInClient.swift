@@ -79,6 +79,12 @@ public struct NativeIdentity {
     public let userID: String
     public let subject: String
     public let expiresAt: Date
+
+    public init(userID: String, subject: String, expiresAt: Date) {
+        self.userID = userID
+        self.subject = subject
+        self.expiresAt = expiresAt
+    }
 }
 
 private struct TokenResponse: Decodable {
