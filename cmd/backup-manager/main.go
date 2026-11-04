@@ -49,6 +49,14 @@ func run() error {
 	flag.StringVar(&o.requiredACR, "auth-required-acr", "", "required IdP MFA assurance value")
 	flag.StringVar(&o.keyID, "auth-key-id", "", "expected JWT signing key ID")
 	flag.StringVar(&o.rsaPublicKey, "auth-public-key", "", "pinned RSA verifier PUBLIC KEY PEM")
+	flag.BoolVar(&o.browserLogin, "enable-browser-login", false, "enable OIDC PKCE browser sign-in over HTTPS")
+	flag.StringVar(&o.oidcAuthorizeURL, "oidc-authorize-url", "", "pinned OIDC HTTPS authorization endpoint")
+	flag.StringVar(&o.oidcTokenURL, "oidc-token-url", "", "pinned OIDC HTTPS token endpoint")
+	flag.StringVar(&o.oidcRedirectURI, "oidc-redirect-uri", "", "exact HTTPS callback URI on the loopback listener")
+	flag.StringVar(&o.oidcAPIScope, "oidc-api-scope", "", "registered API scope, excluding openid and offline_access")
+	flag.StringVar(&o.oidcIDKeyID, "oidc-id-key-id", "", "pinned ID-token signing key ID")
+	flag.StringVar(&o.oidcIDPublicKey, "oidc-id-public-key", "", "pinned ID-token RSA PUBLIC KEY PEM")
+
 	flag.Parse()
 
 	if err := o.check(); err != nil {
@@ -94,7 +102,7 @@ func run() error {
 	serveResult := make(chan error, 1)
 	go func() { serveResult <- service.Serve(listener) }()
 	slog.Info("M1 local API started", "listen", listener.Addr().String(),
-		"tls_enabled", tlsConfig != nil, "bearer_auth_enabled", o.enableBearerAuth,
+		"tls_enabled", tlsConfig != nil, "bearer_auth_enabled", o.enableBearerAuth, "browser_login_enabled", o.browserLogin,
 		"version", server.Version)
 
 	select {
