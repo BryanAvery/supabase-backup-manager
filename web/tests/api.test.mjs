@@ -85,7 +85,7 @@ test("untrusted response MIME, size and denied access never become projects", as
     new Response(JSON.stringify([PROJECT]), { status: 200, headers: { "Content-Type": "text/html" } }));
   await assert.rejects(() => malformed.projects(), /content type/);
   const oversized = new BrowserAPI(async () =>
-    new Response("x".repeat(520000), { status: 200, headers: { "Content-Type": "application/json" } }));
+    new Response("x".repeat(550000), { status: 200, headers: { "Content-Type": "application/json" } }));
   await assert.rejects(() => oversized.projects(), /too large/);
   const denied = new BrowserAPI(async () =>
     new Response(JSON.stringify({ error: "request_denied" }), { status: 401, headers: { "Content-Type": "application/json" } }));
