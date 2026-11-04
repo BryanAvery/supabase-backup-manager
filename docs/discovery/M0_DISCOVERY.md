@@ -1,5 +1,5 @@
 # M0 technical discovery - evidence-led assessment
-Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual and automated four-object Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
+Date: 4 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreSQL fixture, manual and automated four-object Storage recovery, synthetic email/password Auth recovery, and single Edge Function cross-project redeployment drills have passed. Full Cloud and self-hosted recovery are not yet demonstrated; no production project was modified.
 
 ## Executed Cloud PostgreSQL fixture recovery - 3 November 2026
 
@@ -17,9 +17,25 @@ Date: 3 November 2026. **Status: NOT COMPLETE / NO-GO.** Isolated Cloud PostgreS
   - parent: `0a7083c301db6a7a2125751664873464` on both;
   - child: `5955fa9eb3c8a55d5937dab96399f744` on both.
 - Evidence: operator-provided Terminal outputs in the M0 discovery session. The dump is on the operator's Mac, **not committed to Git**.
-- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, automated bulk Storage object recovery, independently escrowed Edge Function source, project settings, secrets, fresh-host recovery, sequence increment behaviour, negative tests, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
+- Limits: this is a schema-scoped fixture restore, not full project or database recovery; database roles/grants, full Auth configuration, automated bulk Storage object recovery, independently escrowed Edge Function source, project settings, secrets, fresh-host recovery, broader role/ownership recovery, RPO/RTO and consistency remain unverified. MD5 comparisons cover selected fixture fields, not all metadata or bytes.
 
-**Next drill:** verify private Storage access denial and automated paginated enumeration; separately prove Edge Function recovery from independently retained source after source loss. Keep real user data and credentials out of evidence and Git.
+**Further work:** verify full-project role and ownership recovery, independent Edge Function source escrow, settings/secrets and self-hosted recovery. Keep real user data and credentials out of evidence and Git.
+
+## Executed PostgreSQL sequence, foreign-key, RLS and ACL recovery checks - 4 November 2026
+
+**Result: PASS for tested fixture sequence/FK behaviour, RLS denial, and archive-driven schema/table grant recovery; full roles and ownership recovery unverified. Overall M0 remains NO-GO.**
+
+- Disposable source `qfcowkrbothbseswosjg` and destination `fdlozdsycfeaxglwstjx`; PostgreSQL 17.11, local pg_dump/pg_restore 18.6.
+- Destination `m0_fixture.parent.id` and `child.id` are `GENERATED ALWAYS AS IDENTITY`, backed by `parent_id_seq` and `child_id_seq`. Parent next insert returned id 7, child next insert returned id 5; both inserts rolled back. Sequence counters are not transactional and may advance despite rollback.
+- A child insert with nonexistent parent_id -999999 failed with PostgreSQL SQLSTATE 23503 on `child_parent_id_fkey`, confirming FK enforcement.
+- Source/destination table security metadata matched: RLS enabled, FORCE RLS disabled, owner postgres, initial relacl NULL. Two SELECT policies for `authenticated` with `USING (false)` matched field-by-field across projects.
+- Initial `SET LOCAL ROLE authenticated` SELECT failed with SQLSTATE 42501 (schema access denied), which **does not prove RLS enforcement**. A transaction-local schema USAGE and table SELECT grant allowed the query but returned zero visible rows; the transaction was rolled back.
+- Controlled explicit source grants were added: `GRANT USAGE ON SCHEMA m0_fixture TO authenticated` and `GRANT SELECT ON TABLE m0_fixture.parent TO authenticated`. Source relacl showed `authenticated=r/postgres`. These grants were added **after the original schema restore**, so the earlier missing grants are not evidence of a failed original restore.
+- New local custom archive `$HOME/supabase-m0/backups/permissions/m0_with_grants.dump` (7.6 KB), created with `pg_dump --format=custom --no-owner --schema=m0_fixture` **without `--no-acl`**, contained two ACL TOC entries. `pg_restore --schema-only --file=-` exposed both expected GRANT statements. Earlier `--no-acl` approach deliberately excludes ACL entries.
+- Destination baseline `has_schema_privilege('authenticated','m0_fixture','USAGE')` and `has_table_privilege('authenticated','m0_fixture.parent','SELECT')` returned false/false. The two grants were first manually applied and independently verified true/true; RLS still returned zero visible parent rows. Both grants were then revoked and independently verified false/false for a clean automated test.
+- An `acl-only.list` generated from `pg_restore --list ... | grep ' ACL '` contained exactly the schema and table ACL entries. `pg_restore --use-list=... --exit-on-error --verbose` against the disposable destination reported creating both ACLs without errors. Independent destination privilege queries returned **true/true**. `BEGIN; SET LOCAL ROLE authenticated; SELECT COUNT(*) FROM m0_fixture.parent; ROLLBACK;` returned **0**, confirming RLS still blocked protected records after archive-driven ACL recovery.
+- **Proven:** isolated fixture identity/sequence and FK behaviour; effective RLS denial with valid table access; extraction and automated restoration of two explicit schema/table grants from a PostgreSQL archive.
+- **Not proven:** complete database and role creation/membership, object ownership portability, default privileges, column/function/sequence grants, broader ACLs, permission equivalence across all schemas, full project recovery or least-privilege deployment. Manual test SQL and local archive are not committed to Git.
 
 ## Executed Cloud Storage single-object recovery - 3 November 2026
 
@@ -183,8 +199,8 @@ No component can be called "automatically recoverable" until its actual clean-ta
 - [x] Dedicated disposable Cloud source and independent restore target approved
 - [ ] Disposable pinned self-hosted source and independent restore target approved
 - [ ] CLI, PostgreSQL, Auth, Storage and Functions versions recorded
-- [ ] Permissions, TLS, least privilege and cross-project access denial tested (unauthenticated requests rejected; one restored policy permits intended document and restricts another object; cross-project denial and broader privilege checks remain)
-- [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture schema, FK, RLS and data checksums passed; roles/grants and sequence behaviour remain)
+- [ ] Permissions, TLS, least privilege and cross-project access denial tested (fixture PostgreSQL ACL recovery and RLS denial passed; Storage access tests narrowly passed; cross-project denial, TLS and broader privilege checks remain)
+- [ ] DB export/restore with FK, roles, RLS, sequences and fixture hashes (fixture data hashes, FK, identity sequence behaviour, RLS enforcement and two ACL grants passed; full roles/ownership/default privileges and whole-database recovery remain)
 - [x] Storage export/restore with pagination and every object checksum (four synthetic objects automated, root pagination and nested folders tested, destination bytes independently verified; larger scale and production readiness not established)
 - [ ] Auth records/config restored and synthetic login succeeds (synthetic email/password records and login passed; full Auth config and other providers remain)
 - [x] Edge Function source redeployed and invoked (one synthetic function deployed to previously absent destination and authenticated HTTP 200 verified; independent offline source escrow, dependencies and secrets remain unverified)
