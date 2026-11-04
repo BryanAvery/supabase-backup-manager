@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/BryanAvery/supabase-backup-manager/internal/catalogue"
 	"github.com/BryanAvery/supabase-backup-manager/internal/identity"
 	"github.com/BryanAvery/supabase-backup-manager/internal/server"
+	"github.com/BryanAvery/supabase-backup-manager/internal/websession"
 )
 
 // serviceOptions contains paths and public identity-verification settings,
@@ -27,6 +29,9 @@ type serviceOptions struct {
 	enableBearerAuth                        bool
 	issuer, audience, clientID, requiredACR string
 	keyID, rsaPublicKey                     string
+	browserLogin                            bool
+	oidcAuthorizeURL, oidcTokenURL, oidcRedirectURI string
+	oidcAPIScope, oidcIDKeyID, oidcIDPublicKey string
 }
 
 func (o serviceOptions) check() error {
@@ -47,6 +52,23 @@ func (o serviceOptions) check() error {
 			o.requiredACR == "" || o.keyID == "" || o.rsaPublicKey == "" {
 			return errors.New("bearer authentication requires catalogue, TLS and all verifier settings")
 		}
+	}
+	if o.browserLogin {
+		if !o.enableBearerAuth || o.oidcAuthorizeURL == "" || o.oidcTokenURL == "" ||
+			o.oidcRedirectURI == "" || o.oidcAPIScope == "" ||
+			o.oidcIDKeyID == "" || o.oidcIDPublicKey == "" {
+			return errors.New("browser sign-in requires TLS bearer authentication and complete pinned OIDC settings")
+		}
+		redirect, err := url.Parse(o.oidcRedirectURI)
+		if err != nil || redirect.Scheme != "https" || redirect.Host != o.listen ||
+			redirect.Path != "/web/auth/callback" || redirect.RawQuery != "" ||
+			redirect.Fragment != "" || redirect.User != nil {
+			return errors.New("OIDC redirect must exactly match the configured TLS loopback listener")
+		}
+	} else if o.oidcAuthorizeURL != "" || o.oidcTokenURL != "" ||
+		o.oidcRedirectURI != "" || o.oidcAPIScope != "" ||
+		o.oidcIDKeyID != "" || o.oidcIDPublicKey != "" {
+		return errors.New("OIDC browser settings require -enable-browser-login")
 	}
 	return nil
 }
@@ -146,5 +168,26 @@ func configuredHandler(ctx context.Context, o serviceOptions) (http.Handler, fun
 			return nil, nil, fmt.Errorf("configure verified identity: %w", err)
 		}
 	}
-	return server.NewCatalogueHandler(store, verifier), store.Close, nil
+	base := server.NewCatalogueHandler(store, verifier)
+	if !o.browserLogin {
+		return base, store.Close, nil
+	}
+	idKey, err := readRSAPublicKey(o.oidcIDPublicKey)
+	if err != nil {
+		store.Close()
+		return nil, nil, err
+	}
+	web, err := websession.NewHandler(websession.Config{
+		Issuer: o.issuer, ClientID: o.clientID,
+		APIAudience: o.audience, APIScope: o.oidcAPIScope,
+		RequiredACR: o.requiredACR,
+		AuthorizationURL: o.oidcAuthorizeURL, TokenURL: o.oidcTokenURL,
+		RedirectURI: o.oidcRedirectURI,
+		IDTokenKeyID: o.oidcIDKeyID, IDTokenPublicKey: idKey,
+	}, store, verifier, base)
+	if err != nil {
+		store.Close()
+		return nil, nil, fmt.Errorf("configure browser OIDC: %w", err)
+	}
+	return web, store.Close, nil
 }
