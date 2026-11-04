@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,6 +53,7 @@ type testProvider struct{
 	challenge string
 	nonceOverride,subjectOverride string
 	exchanges int
+	expiresIn int
 	issuer string
 	signingKey *rsa.PrivateKey
 }
@@ -72,6 +74,8 @@ func(p *testProvider)serve(t *testing.T,w http.ResponseWriter,r *http.Request){
 	if err:=r.ParseForm();err!=nil{http.Error(w,"invalid form",400);return}
 	p.mu.Lock()
 	challenge,nonceOverride,subjectOverride:=p.challenge,p.nonceOverride,p.subjectOverride
+	expiresIn:=p.expiresIn
+	if expiresIn==0{expiresIn=300}
 	p.exchanges++
 	p.mu.Unlock()
 	digest:=sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
@@ -96,12 +100,12 @@ func(p *testProvider)serve(t *testing.T,w http.ResponseWriter,r *http.Request){
 	},"JWT")
 	w.Header().Set("Content-Type","application/json")
 	_ =json.NewEncoder(w).Encode(map[string]any{
-		"token_type":"Bearer","expires_in":300,
+		"token_type":"Bearer","expires_in":expiresIn,
 		"access_token":access,"id_token":id,
 	})
 }
 type browserFixture struct{
-	handler *Handler
+	handler http.Handler
 	app *httptest.Server
 	provider *testProvider
 	idp *httptest.Server
@@ -148,13 +152,10 @@ func makeFixture(t *testing.T)*browserFixture{
 	}
 	h,err=NewHandler(config,store,v,http.NotFoundHandler())
 	if err!=nil{t.Fatal(err)}
-	handler,ok:=h.(*Handler)
-	_ =handler
-	_ =ok
 	// The actual bound middleware is used for network requests.
 	client:=app.Client()
 	client.CheckRedirect=func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}
-	return &browserFixture{app:app,provider:provider,idp:idp,store:store,client:client}
+	return &browserFixture{handler:h,app:app,provider:provider,idp:idp,store:store,client:client}
 }
 
 func(f *browserFixture)do(t *testing.T,method,path string,cookies []*http.Cookie,headers map[string]string)(*http.Response,[]byte){
@@ -166,16 +167,8 @@ func(f *browserFixture)do(t *testing.T,method,path string,cookies []*http.Cookie
 	resp,err:=f.client.Do(req)
 	if err!=nil{t.Fatal(err)}
 	defer resp.Body.Close()
-	var output struct{Status string}
-	_ =output
-	body:=make([]byte,0)
-	dec:=json.NewDecoder(resp.Body)
-	_ =dec
-	// All response bodies in this fixture are small and static.
-	buf:=new(strings.Builder)
-	_,err=buf.ReadFrom(resp.Body)
+	body,err:=io.ReadAll(io.LimitReader(resp.Body,8192))
 	if err!=nil{t.Fatal(err)}
-	body=[]byte(buf.String())
 	return resp,body
 }
 
@@ -218,4 +211,139 @@ func(f *browserFixture)callback(t *testing.T,state string,cookie *http.Cookie)(*
 		"state":{state},"iss":{f.provider.issuer},"code":{"synthetic-code"},
 	}
 	return f.do(t,"GET","/web/auth/callback?"+query.Encode(),[]*http.Cookie{cookie},nil)
+}
+
+func TestBrowserLoginPKCESessionAndLogout(t *testing.T){
+	f:=makeFixture(t)
+	state,nonce,loginCookieValue:=f.start(t)
+	if state==nonce{t.Fatal("state and nonce must be independent")}
+	resp,body:=f.callback(t,state,loginCookieValue)
+	if resp.StatusCode!=http.StatusSeeOther {
+		t.Fatalf("valid signed OIDC callback rejected: %d %s",resp.StatusCode,body)
+	}
+	if resp.Header.Get("Location")!="/web/session"{
+		t.Fatal("callback redirected to an uncontrolled URL")
+	}
+	session:=cookieByName(t,resp,sessionCookie)
+	if !session.Secure || !session.HttpOnly || session.Path!="/" ||
+		session.SameSite!=http.SameSiteLaxMode {
+		t.Fatalf("unsafe session cookie: %+v",session)
+	}
+	resp,body=f.do(t,"GET","/web/session",[]*http.Cookie{session},nil)
+	if resp.StatusCode!=200{t.Fatalf("session not active: %d %s",resp.StatusCode,body)}
+	var status struct{
+		Authenticated bool `json:"authenticated"`
+		CSRF string `json:"csrf_token"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err:=json.Unmarshal(body,&status);err!=nil{t.Fatal(err)}
+	if !status.Authenticated || len(status.CSRF)<32 || status.ExpiresAt==""{
+		t.Fatalf("session status incomplete: %+v",status)
+	}
+	resp,body=f.do(t,"GET","/web/projects",[]*http.Cookie{session},nil)
+	if resp.StatusCode!=200 || !strings.Contains(string(body),"synthetic-project"){
+		t.Fatalf("session project listing failed: %d %s",resp.StatusCode,body)
+	}
+	resp,_=f.do(t,"POST","/web/logout",[]*http.Cookie{session},map[string]string{
+		"Origin":"https://attacker.example","X-CSRF-Token":status.CSRF,
+	})
+	if resp.StatusCode!=403{t.Fatalf("cross-site logout accepted: %d",resp.StatusCode)}
+	resp,_=f.do(t,"POST","/web/logout",[]*http.Cookie{session},map[string]string{
+		"Origin":f.app.URL,"X-CSRF-Token":"forged",
+	})
+	if resp.StatusCode!=403{t.Fatalf("incorrect CSRF accepted: %d",resp.StatusCode)}
+	resp,_=f.do(t,"POST","/web/logout",[]*http.Cookie{session},map[string]string{
+		"Origin":f.app.URL,"X-CSRF-Token":status.CSRF,
+	})
+	if resp.StatusCode!=204{t.Fatalf("logout failed: %d",resp.StatusCode)}
+	resp,_=f.do(t,"GET","/web/session",[]*http.Cookie{session},nil)
+	if resp.StatusCode!=401{t.Fatal("logged-out session still valid")}
+	f.store.mu.Lock()
+	revoked:=len(f.store.revoked)
+	f.store.mu.Unlock()
+	if revoked!=1{t.Fatal("logout did not revoke API bearer token")}
+}
+
+func TestCallbackStateBindingAndReplay(t *testing.T){
+	f:=makeFixture(t)
+	first,_,firstCookie:=f.start(t)
+	second,_,secondCookie:=f.start(t)
+	resp,_:=f.callback(t,first,secondCookie)
+	if resp.StatusCode!=400{t.Fatal("state swapping between browser transactions succeeded")}
+	resp,_=f.callback(t,first,firstCookie)
+	if resp.StatusCode!=400{t.Fatal("wrong-cookie consumed callback could be replayed")}
+	resp,_=f.callback(t,second,secondCookie)
+	if resp.StatusCode!=303{t.Fatalf("separate untampered login rejected: %d",resp.StatusCode)}
+	resp,_=f.callback(t,second,secondCookie)
+	if resp.StatusCode!=400{t.Fatal("callback replay succeeded")}
+	f.provider.mu.Lock()
+	count:=f.provider.exchanges
+	f.provider.mu.Unlock()
+	if count!=1{t.Fatalf("invalid callbacks reached token endpoint %d times",count)}
+}
+
+func TestCallbackRejectsWrongNonceSubjectAndIssuer(t *testing.T){
+	t.Run("nonce",func(t *testing.T){
+		f:=makeFixture(t)
+		state,_,cookie:=f.start(t)
+		f.provider.mu.Lock();f.provider.nonceOverride="forged-nonce";f.provider.mu.Unlock()
+		resp,_:=f.callback(t,state,cookie)
+		if resp.StatusCode!=401{t.Fatalf("wrong nonce accepted: %d",resp.StatusCode)}
+	})
+	t.Run("subject",func(t *testing.T){
+		f:=makeFixture(t)
+		state,_,cookie:=f.start(t)
+		f.provider.mu.Lock();f.provider.subjectOverride="unexpected-subject";f.provider.mu.Unlock()
+		resp,_:=f.callback(t,state,cookie)
+		if resp.StatusCode!=401{t.Fatalf("different ID token identity accepted: %d",resp.StatusCode)}
+	})
+	t.Run("issuer",func(t *testing.T){
+		f:=makeFixture(t)
+		state,_,cookie:=f.start(t)
+		query:=url.Values{"state":{state},"iss":{"https://imposter.example"},"code":{"synthetic-code"}}
+		resp,_:=f.do(t,"GET","/web/auth/callback?"+query.Encode(),[]*http.Cookie{cookie},nil)
+		if resp.StatusCode!=400{t.Fatalf("mismatched response issuer accepted %d",resp.StatusCode)}
+		f.provider.mu.Lock();exchanges:=f.provider.exchanges;f.provider.mu.Unlock()
+		if exchanges!=0{t.Fatal("untrusted issuer received token exchange")}
+	})
+}
+
+func TestSessionExpiryAndDisabledIdentity(t *testing.T){
+	t.Run("expired",func(t *testing.T){
+		f:=makeFixture(t)
+		f.provider.mu.Lock();f.provider.expiresIn=1;f.provider.mu.Unlock()
+		state,_,cookie:=f.start(t)
+		resp,_:=f.callback(t,state,cookie)
+		if resp.StatusCode!=303{t.Fatalf("short-lived callback failed %d",resp.StatusCode)}
+		session:=cookieByName(t,resp,sessionCookie)
+		time.Sleep(1250*time.Millisecond)
+		resp,_=f.do(t,"GET","/web/session",[]*http.Cookie{session},nil)
+		if resp.StatusCode!=401{t.Fatalf("expired session accepted %d",resp.StatusCode)}
+	})
+	t.Run("disabled",func(t *testing.T){
+		f:=makeFixture(t)
+		state,_,cookie:=f.start(t)
+		resp,_:=f.callback(t,state,cookie)
+		if resp.StatusCode!=303{t.Fatalf("callback failed %d",resp.StatusCode)}
+		session:=cookieByName(t,resp,sessionCookie)
+		f.store.mu.Lock()
+		delete(f.store.identities,identity.ExternalSubjectKey(f.provider.issuer,"synthetic-subject"))
+		f.store.mu.Unlock()
+		resp,_=f.do(t,"GET","/web/projects",[]*http.Cookie{session},nil)
+		if resp.StatusCode!=401{t.Fatalf("disabled account still has browser access: %d",resp.StatusCode)}
+	})
+}
+
+func TestPlaintextAndUnconfiguredBrowserEndpointsFailClosed(t *testing.T){
+	f:=makeFixture(t)
+	req:=httptest.NewRequest("GET","http://127.0.0.1/web/login",nil)
+	req.Host=strings.TrimPrefix(f.app.URL,"https://")
+	req.Header.Set("X-Forwarded-Proto","https")
+	w:=httptest.NewRecorder()
+	f.handler.ServeHTTP(w,req)
+	if w.Code!=403{t.Fatalf("fake HTTPS bypassed OIDC transport requirement: %d",w.Code)}
+	resp,_:=f.do(t,"GET","/web/projects",nil,nil)
+	if resp.StatusCode!=401{t.Fatalf("browser projects accessible anonymously: %d",resp.StatusCode)}
+	resp,_=f.do(t,"POST","/web/projects",nil,nil)
+	if resp.StatusCode!=405{t.Fatalf("unauthorised browser project writes enabled: %d",resp.StatusCode)}
 }
