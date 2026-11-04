@@ -50,7 +50,7 @@ func TestInitialiseAndReopen(t *testing.T) {
 		t.Fatalf("catalogue file mode: %v, %v", fi, err)
 	}
 	var count int
-	if err := store.db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 1 {
+	if err := store.db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
 		t.Fatalf("migration register count %d: %v", count, err)
 	}
 	if err := store.Verify(ctx); err != nil {
@@ -69,7 +69,7 @@ func TestInitialiseAndReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	if err := reopened.db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 1 {
+	if err := reopened.db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
 		t.Fatalf("migration rerun created duplicates: %d, %v", count, err)
 	}
 }
@@ -83,7 +83,7 @@ func TestMigrationFailureRollsBack(t *testing.T) {
 	}
 	failureSQL := "CREATE TABLE partial_example(id INTEGER); INSERT INTO nonexistent_table VALUES (1);"
 	hash := sha256.Sum256([]byte(failureSQL))
-	migrations = append(migrations, migration{version: "0002_fail", sql: failureSQL, checksum: hex.EncodeToString(hash[:])})
+	migrations = append(migrations, migration{version: "0003_fail", sql: failureSQL, checksum: hex.EncodeToString(hash[:])})
 	err = applyMigrations(ctx, store.db, migrations)
 	if err == nil {
 		t.Fatal("expected migration failure")
@@ -92,7 +92,7 @@ func TestMigrationFailureRollsBack(t *testing.T) {
 	if err := store.db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE name='partial_example'").Scan(&found); err != nil || found != 0 {
 		t.Fatalf("partial DDL persisted: %d %v", found, err)
 	}
-	if err := store.db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&found); err != nil || found != 1 {
+	if err := store.db.QueryRowContext(ctx, "SELECT count(*) FROM schema_migrations").Scan(&found); err != nil || found != 2 {
 		t.Fatalf("migration recorded despite rollback: %d %v", found, err)
 	}
 }
@@ -202,7 +202,7 @@ func TestSnapshotAllowsRollbackToOlderSchemaOnCopy(t *testing.T) {
 	sqlText := "CREATE TABLE upgrade_only (id TEXT PRIMARY KEY)"
 	hash := sha256.Sum256([]byte(sqlText))
 	migrations = append(migrations, migration{
-		version: "0002_new_feature",
+		version: "0003_new_feature",
 		sql: sqlText, checksum: hex.EncodeToString(hash[:]),
 	})
 	if err := applyMigrations(ctx, store.db, migrations); err != nil {
@@ -210,7 +210,7 @@ func TestSnapshotAllowsRollbackToOlderSchemaOnCopy(t *testing.T) {
 	}
 	var count int
 	if err := store.db.QueryRowContext(ctx,
-		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
+		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 3 {
 		t.Fatalf("upgraded migration count %d: %v", count, err)
 	}
 	// A complete snapshot, rather than reverse SQL, is the rollback source.
@@ -220,7 +220,7 @@ func TestSnapshotAllowsRollbackToOlderSchemaOnCopy(t *testing.T) {
 	}
 	defer rollback.Close()
 	if err := rollback.db.QueryRowContext(ctx,
-		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 1 {
+		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
 		t.Fatalf("snapshot did not preserve previous schema version: %d, %v", count, err)
 	}
 	if err := rollback.db.QueryRowContext(ctx,

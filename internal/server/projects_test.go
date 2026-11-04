@@ -10,6 +10,7 @@ import (
  "net/http/httptest"
  "path/filepath"
  "strings"
+ "time"
  "testing"
 
  "github.com/BryanAvery/supabase-backup-manager/internal/catalogue"
@@ -32,6 +33,9 @@ func newTestCatalogue(t *testing.T)(*catalogue.Store,*sql.DB){
  t.Cleanup(func(){_ =db.Close();_ =store.Close()})
  for _,row:=range []struct{id,status string}{{"actor-a","active"},{"actor-b","active"},{"disabled","disabled"}}{
   if _,err:=db.Exec("INSERT INTO users(id,display_name,status,created_at) VALUES(?,?,?,'2026-11-04T00:00:00Z')",row.id,row.id,row.status);err!=nil{t.Fatal(err)}
+ }
+ for _,userID:=range []string{"actor-a","actor-b"}{
+  if _,err:=db.Exec("INSERT INTO instance_administrators(user_id,granted_at,grant_reason) VALUES(?,'2026-11-04T00:00:00Z','synthetic fixture')",userID);err!=nil{t.Fatal(err)}
  }
  return store,db
 }
@@ -161,5 +165,70 @@ func TestNoSecretsInProjectResponses(t *testing.T){
  if w.Code!=200||!strings.Contains(w.Body.String(),p.ID){t.Fatal("project listing failed")}
  for _,forbidden:=range []string{"secret_ref","connection_string","password","token"}{
   if strings.Contains(strings.ToLower(w.Body.String()),forbidden){t.Fatalf("sensitive field exposed: %s",forbidden)}
+ }
+}
+
+func TestInstanceAdministratorIsAuthoritative(t *testing.T){
+ store,db:=newTestCatalogue(t)
+ h:=NewCatalogueHandler(store,testAuthenticator{principal:Principal{
+  UserID:"actor-a",CanProvisionProjects:true,
+ }})
+ payload:=`{"name":"Denied","environment":"cloud"}`
+ if _,err:=db.Exec("DELETE FROM instance_administrators WHERE user_id='actor-a'");err!=nil{t.Fatal(err)}
+ w:=request(t,h,"POST","/api/v1/projects",payload,map[string]string{"Content-Type":"application/json"})
+ if w.Code!=403{t.Fatalf("token roles bypassed removed administrator grant: %d",w.Code)}
+ if _,err:=db.Exec("INSERT INTO instance_administrators(user_id,granted_at,grant_reason) VALUES('actor-a','2026-11-04T00:00:00Z','restored fixture grant')");err!=nil{t.Fatal(err)}
+ w=request(t,h,"POST","/api/v1/projects",payload,map[string]string{"Content-Type":"application/json"})
+ if w.Code!=201{t.Fatalf("restored grant rejected: %d %s",w.Code,w.Body.String())}
+}
+
+func TestRevokeBearerToken(t *testing.T){
+ store,db:=newTestCatalogue(t)
+ digest:=strings.Repeat("a",64)
+ h:=NewCatalogueHandler(store,testAuthenticator{principal:Principal{
+  UserID:"actor-a",TokenDigest:digest,TokenExpiresAt:time.Now().Add(10*time.Minute),
+ }})
+ w:=request(t,h,"POST","/api/v1/sessions/revoke","",nil)
+ if w.Code!=http.StatusNoContent{t.Fatalf("revoke returned %d %s",w.Code,w.Body.String())}
+ var found int
+ if err:=db.QueryRow("SELECT count(*) FROM revoked_access_tokens WHERE token_sha256=?",digest).Scan(&found);err!=nil||found!=1{
+  t.Fatalf("revocation not persisted %d: %v",found,err)
+ }
+ w=request(t,h,"POST","/api/v1/sessions/revoke","",nil)
+ if w.Code!=204{t.Fatalf("idempotent revoke failed: %d",w.Code)}
+ w=request(t,h,"POST","/api/v1/sessions/revoke","",map[string]string{"Origin":"https://attacker.example"})
+ if w.Code!=403{t.Fatalf("cross-origin revocation accepted: %d",w.Code)}
+}
+
+func TestRequestLimiter(t *testing.T){
+ handler:=limitRequests(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  w.WriteHeader(http.StatusNoContent)
+ }),2,time.Minute)
+ for _,want:=range []int{204,204,429}{
+  w:=request(t,handler,"POST","/api/v1/projects","",nil)
+  if w.Code!=want{t.Fatalf("got %d want %d",w.Code,want)}
+ }
+}
+
+func TestProjectRoleMatrixAndMembershipRevocation(t *testing.T){
+ for _,role:=range []string{"viewer","operator","administrator","recovery_approver"}{
+  t.Run(role,func(t *testing.T){
+   store,db:=newTestCatalogue(t)
+   owner:=NewCatalogueHandler(store,testAuthenticator{principal:Principal{UserID:"actor-a",CanProvisionProjects:true}})
+   project:=create(t,owner,"Synthetic role test")
+   if _,err:=db.Exec("INSERT INTO project_members(project_id,user_id,role) VALUES(?,?,?)",project.ID,"actor-b",role);err!=nil{t.Fatal(err)}
+   member:=NewCatalogueHandler(store,testAuthenticator{principal:Principal{UserID:"actor-b"}})
+   visible:=request(t,member,"GET","/api/v1/projects","",nil)
+   if visible.Code!=200 || !strings.Contains(visible.Body.String(),project.ID){
+    t.Fatalf("authorised %s cannot see project: %d %s",role,visible.Code,visible.Body.String())
+   }
+   caps:=request(t,member,"GET","/api/v1/projects/"+project.ID+"/capabilities","",nil)
+   if caps.Code!=200{t.Fatalf("%s denied capabilities: %d",role,caps.Code)}
+   if _,err:=db.Exec("DELETE FROM project_members WHERE project_id=? AND user_id=?",project.ID,"actor-b");err!=nil{t.Fatal(err)}
+   visible=request(t,member,"GET","/api/v1/projects","",nil)
+   if visible.Code!=200 || strings.Contains(visible.Body.String(),project.ID){t.Fatalf("%s retained membership after revocation",role)}
+   caps=request(t,member,"GET","/api/v1/projects/"+project.ID+"/capabilities","",nil)
+   if caps.Code!=404{t.Fatalf("%s retained access after membership removal: %d",role,caps.Code)}
+  })
  }
 }
