@@ -39,6 +39,7 @@ type ProjectRepository interface {
  ListCapabilities(context.Context,string,string)([]Capability,error)
  CreateProject(context.Context,string,string,string)(Project,error)
  IsInstanceAdministrator(context.Context,string)(bool,error)
+ RevokeAccessToken(context.Context,string,time.Time)error
 }
 var _ ProjectRepository = (*Store)(nil)
 
