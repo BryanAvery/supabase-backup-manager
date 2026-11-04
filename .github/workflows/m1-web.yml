@@ -50,7 +50,7 @@ jobs:
             echo 'Unexpected privileged secret marker in browser bundle'
             exit 1
           fi
-      - name: Emit compressed dependency lockfile for reproducible follow-up commit
+      - name: Emit dependency lockfile for reproducible follow-up commit
         working-directory: web
         run: |
           echo 'SBM_WEB_LOCK_GZIP_BASE64_START'
