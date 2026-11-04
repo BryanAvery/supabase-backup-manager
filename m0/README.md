@@ -37,3 +37,17 @@ A JSON report is written to `reports/`. The runner exits non-zero on failure. It
 - CI execution against an ephemeral PostgreSQL target
 
 Do not mark M0 complete until these tests are implemented and run successfully.
+
+## Stage 2: security and integrity (experimental)
+
+After a successful Stage 1 restore, GitHub Actions runs `python3 m0/stage2.py --output reports`. The script is read-only and produces `reports/m0-stage2.json`. A failing check makes the job fail.
+
+Checks:
+- Compare raw schema/table ACL definitions and effective `anon`/`authenticated` privilege matrices.
+- Compare SHA-256 hashes of all fixture table rows in deterministic JSON-text order (the row content, not only row counts).
+- Compare sequence `last_value` visible through `pg_sequences`.
+- Run `SET LOCAL ROLE authenticated` and check the expected zero visible rows in `m0_fixture.parent` on both databases.
+
+**Known gaps and expected failures:** Stage 1 restores with `--no-acl`, so ACL checks may fail until permissions are restored explicitly. The RLS test currently covers only the fixture's denied-row case for `authenticated`; it does not prove allowed-row access, `anon` restrictions, JWT claims or API-level authentication. The sequence check does not cover `is_called` or inaccessible sequence values. Raw ACL strings can differ because owners differ. This is a first automated Stage 2 implementation, **not** final security acceptance. Review failing reports and extend tests before signing off M0.
+
+No databases have been modified or tests executed by adding this code.
