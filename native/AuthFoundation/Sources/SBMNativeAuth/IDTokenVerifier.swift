@@ -34,10 +34,10 @@ public struct IDTokenVerifier {
         for untrusted in ["jwk", "jku", "x5u", "x5c", "crit"] {
             guard header[untrusted] == nil else { throw NativeAuthError.invalidToken }
         }
-        let attributes: [CFString: Any] = [
-            kSecAttrKeyType: kSecAttrKeyTypeRSA,
-            kSecAttrKeyClass: kSecAttrKeyClassPublic,
-            kSecAttrKeySizeInBits: 2048
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
+            kSecAttrKeySizeInBits as String: 2048
         ]
         guard let publicKey = SecKeyCreateWithData(
             configuration.idTokenRSAPublicKeyDER as CFData,
