@@ -42,18 +42,44 @@ jobs:
           set -euo pipefail
           mkdir -p reports
           for cycle in 1 2; do
-            echo "Starting recovery validation cycle $cycle"
-            python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports
-            latest=$(find reports -maxdepth 1 -name 'm0-20*.json' -type f -print | sort | tail -n 1)
-            test -n "$latest"
-            cp "$latest" "reports/cycle-$cycle-stage1.json"
-            python3 m0/stage2.py --output reports
-            cp reports/m0-stage2.json "reports/cycle-$cycle-stage2.json"
+            echo "::group::Recovery validation cycle $cycle"
+            if python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports; then
+              latest=$(find reports -maxdepth 1 -name 'm0-20*.json' -type f -print | sort | tail -n 1)
+              test -n "$latest"
+              cp "$latest" "reports/cycle-$cycle-stage1.json"
+            else
+              latest=$(find reports -maxdepth 1 -name 'm0-20*.json' -type f -print | sort | tail -n 1)
+              if [[ -n "$latest" ]]; then
+                cp "$latest" "reports/cycle-$cycle-stage1.json"
+                python3 m0/print_failures.py "reports/cycle-$cycle-stage1.json"
+              else
+                echo "::error::Stage 1 exited without writing a JSON report"
+              fi
+              echo "::endgroup::"
+              exit 1
+            fi
+            if python3 m0/stage2.py --output reports; then
+              cp reports/m0-stage2.json "reports/cycle-$cycle-stage2.json"
+            else
+              if [[ -f reports/m0-stage2.json ]]; then
+                cp reports/m0-stage2.json "reports/cycle-$cycle-stage2.json"
+                python3 m0/print_failures.py "reports/cycle-$cycle-stage2.json"
+              else
+                echo "::error::Stage 2 exited without writing a JSON report"
+              fi
+              echo "::endgroup::"
+              exit 1
+            fi
+            echo "::endgroup::"
           done
       - name: Evaluate Stage 3 acceptance
         if: always()
         shell: bash
-        run: python3 m0/stage3.py --reports reports
+        run: |
+          python3 m0/stage3.py --reports reports || {
+            echo "::error::M0 acceptance not achieved. Check the failed-cycle report in the uploaded artefact."
+            exit 1
+          }
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4

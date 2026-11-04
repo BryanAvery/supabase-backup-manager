@@ -74,3 +74,7 @@ Run the offline acceptance check against existing reports with `python3 m0/stage
 - Stage 3 requires both the identity and expanded role checks in each cycle.
 
 **Remaining acceptance limitations:** These role tests do not simulate a genuine signed-in Supabase user with JWT claims or prove that a permitted authenticated user can access their own row. They also do not verify application/API authentication, or complete Supabase disaster recovery. A full positive JWT/RLS test requires a fixture with a documented permitted user and claims. The database-identity query requires permission to call `pg_control_system()`; if denied, request an approved safe identity mechanism rather than bypassing the check. Confirm the recovery target is disposable and has no external dependencies before running the marker-controlled `DROP SCHEMA ... CASCADE`.
+
+## Failure diagnostics
+
+The workflow now saves the Stage 1 or Stage 2 JSON report for a failed cycle before exiting. It emits a GitHub Actions error annotation naming the failed check without echoing database credentials or connection strings. The Stage 3 acceptance gate still fails closed if a cycle is incomplete, and the artifact upload runs even on failure. For a failed run, download `m0-validation-report` and inspect `cycle-1-stage1.json` or `cycle-1-stage2.json` to identify the underlying error. Do not share unredacted reports publicly because database error messages may contain connection details.
