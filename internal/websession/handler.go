@@ -8,13 +8,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/BryanAvery/supabase-backup-manager/internal/identity"
 )
 
 type pendingLogin struct {
@@ -156,8 +153,8 @@ func(h *Handler)complete(w http.ResponseWriter,r *http.Request){
 	if r.Method!=http.MethodGet{
 		w.Header().Set("Allow","GET");jsonError(w,http.StatusMethodNotAllowed);return
 	}
-	// A failed callback still expires the browser binding cookie.
-	defer clearCookie(w,loginCookie)
+	// Clear before any status/body is written, including redirects.
+	clearCookie(w,loginCookie)
 	if len(r.URL.RawQuery)>8192{jsonError(w,http.StatusBadRequest);return}
 	q:=r.URL.Query()
 	state:=single(q,"state")
