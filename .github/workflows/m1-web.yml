@@ -1,0 +1,68 @@
+name: M1 React browser dashboard
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'internal/websession/**'
+      - 'cmd/backup-manager/**'
+      - '.github/workflows/m1-web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'internal/websession/**'
+      - 'cmd/backup-manager/**'
+      - '.github/workflows/m1-web.yml'
+permissions:
+  contents: read
+jobs:
+  browser-dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: false
+      - name: Record runtime version
+        run: |
+          node --version
+          npm --version
+      - name: Resolve pinned dependencies and generate the reviewed npm lockfile
+        working-directory: web
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Strict TypeScript contract checks
+        working-directory: web
+        run: npm run check
+      - name: Negative-path session and CSRF tests
+        working-directory: web
+        run: npm test
+      - name: Compile React static production assets
+        working-directory: web
+        run: npm run build
+      - name: Confirm static output includes no server-side secrets
+        run: |
+          test -f web/dist/index.html
+          test -d web/dist/assets
+          grep -q '/app/assets/' web/dist/index.html
+          test "$(find web/dist/assets -type f | wc -l)" -ge 1
+          if grep -R -i -E 'client_secret|service_role|SUPABASE_SERVICE_ROLE_KEY' web/dist; then
+            echo 'Unexpected privileged secret marker in browser bundle'
+            exit 1
+          fi
+      - name: Emit compressed dependency lockfile for reproducible follow-up commit
+        working-directory: web
+        run: |
+          echo 'SBM_WEB_LOCK_GZIP_BASE64_START'
+          gzip -c package-lock.json | base64 -w0
+          echo
+          echo 'SBM_WEB_LOCK_GZIP_BASE64_END'
+      - name: Upload browser build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-browser-dashboard
+          path: |
+            web/dist
+            web/package-lock.json
+          retention-days: 7
