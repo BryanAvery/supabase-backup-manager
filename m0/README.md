@@ -51,3 +51,16 @@ Checks:
 **Known gaps and expected failures:** Stage 1 restores with `--no-acl`, so ACL checks may fail until permissions are restored explicitly. The RLS test currently covers only the fixture's denied-row case for `authenticated`; it does not prove allowed-row access, `anon` restrictions, JWT claims or API-level authentication. The sequence check does not cover `is_called` or inaccessible sequence values. Raw ACL strings can differ because owners differ. This is a first automated Stage 2 implementation, **not** final security acceptance. Review failing reports and extend tests before signing off M0.
 
 No databases have been modified or tests executed by adding this code.
+
+
+## Stage 3: repeatability and automated acceptance gate
+
+The manual GitHub Actions workflow now runs **two consecutive Stage 1 and Stage 2 cycles** against the same dedicated recovery target. Stage 1's marker-controlled reset prepares the target for the second restore. Each successful cycle produces separate `cycle-1-stage1.json`, `cycle-1-stage2.json`, `cycle-2-stage1.json` and `cycle-2-stage2.json` evidence files. The `m0/stage3.py` gate checks both reports for each cycle and writes `m0-stage3-acceptance.json`.
+
+**Acceptance rule:** all required named checks in both cycles must pass. Missing reports, failed checks, or an incomplete second cycle result in `NOT_ACCEPTED` and a failed workflow. Evidence is uploaded even when the workflow fails. GitHub Actions is still manually triggered, not scheduled.
+
+**Scope:** a `PASS` means the automated M0 *fixture-level* acceptance criteria passed twice. It does **not** certify complete Supabase disaster recovery, JWT/API-level access, extension restoration or storage/auth backup. Stage 2 currently has known gaps and Stage 1 excludes ACL restoration, so failures are expected until those are resolved. Do not treat this gate as sign-off for those untested areas.
+
+**Safety:** only use a separately verified disposable recovery database. The marker-controlled reset drops `m0_fixture` with `CASCADE` when previously marked by the runner; review dependencies. The source fixture is not cleaned. Do not trigger this workflow until the target identity and secrets are confirmed.
+
+Run the offline acceptance check against existing reports with `python3 m0/stage3.py --reports reports`. It does not connect to or modify databases.
