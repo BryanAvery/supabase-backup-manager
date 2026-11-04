@@ -1,0 +1,123 @@
+name: Build macOS installer artifact (unsigned preview)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'deploy/macos/build_preview_pkg.sh'
+      - '.github/workflows/m1-installer.yml'
+      - 'native/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'web/**'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/macos/build_preview_pkg.sh'
+      - '.github/workflows/m1-installer.yml'
+      - 'native/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'web/**'
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-preview-installer:
+    name: macOS arm64 unsigned .pkg preview
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record Apple Silicon runner and source provenance
+        shell: bash
+        run: |
+          test "$(uname -m)" = "arm64"
+          sw_vers
+          xcodebuild -version
+          /usr/bin/xcrun swift --version
+          echo "Building unsigned development preview at $GITHUB_SHA"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build and test native Go daemon without real credentials
+        run: |
+          go vet ./cmd/backup-manager ./internal/...
+          go test ./cmd/backup-manager ./internal/...
+          go build -trimpath -o "$RUNNER_TEMP/backup-manager" ./cmd/backup-manager
+          /usr/bin/lipo -archs "$RUNNER_TEMP/backup-manager"
+
+      - name: Build and test pinned React browser frontend
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run check
+          npm test
+          npm run build
+
+      - name: Build and test Swift authentication and dashboard packages
+        run: |
+          xcrun swift test --package-path native/AuthFoundation --parallel
+          xcrun swift test --package-path native/DesktopFoundation --parallel
+
+      - name: Generate native macOS application project
+        shell: bash
+        run: |
+          if ! command -v xcodegen >/dev/null; then
+            brew install xcodegen
+          fi
+          cd native/DesktopApp
+          xcodegen generate --spec project.yml
+
+      - name: Compile SwiftUI app bundle (unsigned development build)
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project native/DesktopApp/SupabaseBackupManager.xcodeproj \
+            -scheme SupabaseBackupManager \
+            -configuration Release \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$RUNNER_TEMP/sbm-installer-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Create and inspect installation package
+        shell: bash
+        run: |
+          bash -n deploy/macos/build_preview_pkg.sh
+          bash deploy/macos/build_preview_pkg.sh \
+            "$RUNNER_TEMP/sbm-installer-build/Build/Products/Release/SupabaseBackupManager.app" \
+            "$RUNNER_TEMP/backup-manager" \
+            "$GITHUB_WORKSPACE/web/dist" \
+            "$RUNNER_TEMP/sbm-pkg-artifacts" \
+            "$GITHUB_SHA"
+          PKG="$RUNNER_TEMP/sbm-pkg-artifacts/SupabaseBackupManager-macOS-arm64-UNSIGNED-PREVIEW.pkg"
+          test -s "$PKG"
+          (cd "$RUNNER_TEMP/sbm-pkg-artifacts" && shasum -a 256 -c SHA256SUMS)
+          pkgutil --expand "$PKG" "$RUNNER_TEMP/sbm-pkg-expanded"
+          test -f "$RUNNER_TEMP/sbm-pkg-expanded/PackageInfo"
+          test ! -e "$RUNNER_TEMP/sbm-pkg-expanded/Scripts"
+          grep -q '"notarised": false' "$RUNNER_TEMP/sbm-pkg-artifacts/build-manifest.json"
+          grep -q '"daemonEnabledByInstaller": false' "$RUNNER_TEMP/sbm-pkg-artifacts/build-manifest.json"
+          echo "Unsigned package created, verified and NOT installed on the runner."
+
+      - name: Upload downloadable macOS .pkg installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbm-macos-arm64-unsigned-preview-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/sbm-pkg-artifacts/SupabaseBackupManager-macOS-arm64-UNSIGNED-PREVIEW.pkg
+            ${{ runner.temp }}/sbm-pkg-artifacts/SHA256SUMS
+            ${{ runner.temp }}/sbm-pkg-artifacts/READ-ME-FIRST.txt
+            ${{ runner.temp }}/sbm-pkg-artifacts/build-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
