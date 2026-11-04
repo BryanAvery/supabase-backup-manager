@@ -33,9 +33,17 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
-          pg_dump --version
-          pg_restore --version
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc |
+            sudo tee /usr/share/postgresql-common/pgdg/apt.asc > /dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_restore --version
       - name: Bootstrap isolated source fixture (create only if absent)
         run: python3 m0/bootstrap_source.py
       - name: Run two complete recovery validation cycles
