@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import CryptoKit
 import Security
 @testable import SBMNativeAuth
 
