@@ -1,4 +1,4 @@
-name: M1 Go service scaffold
+name: M1 Go service and catalogue
 on:
   pull_request:
     paths:
@@ -28,8 +28,13 @@ jobs:
           cache: false
       - name: Show toolchain
         run: go version
+      - name: Generate verified checksum lockfile for review (temporary)
+        run: |
+          go mod tidy
+          cat go.sum
+          go mod verify
       - name: Build service
-        run: go build ./cmd/backup-manager
+        run: go build -o /tmp/supabase-backup-manager ./cmd/backup-manager
       - name: Static checks
         run: go vet ./...
       - name: Unit and race tests
