@@ -50,3 +50,9 @@ func limitRequests(next http.Handler,maxRequests int,period time.Duration)http.H
   next.ServeHTTP(w,r)
  })
 }
+
+// LimitRequests wraps an additional same-origin web login route with the
+// existing bounded per-client limiter. The API keeps its own limiter.
+func LimitRequests(next http.Handler, maxRequests int, period time.Duration) http.Handler {
+	return limitRequests(next, maxRequests, period)
+}
