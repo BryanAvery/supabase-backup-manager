@@ -214,6 +214,17 @@ final class NativeSignInClientTests: XCTestCase {
         }
     }
 
+    func testFailedAccountSwitchClearsOldKeychainCredential() async throws {
+        let (client, credentials, provider) = try fixture()
+        try credentials.save(AccessCredential(
+            accessToken: "previous-user-token",
+            expiresAt: Date().addingTimeInterval(120)
+        ))
+        provider.wrongMFA = true
+        await expectAuthFailure { try await client.signIn() }
+        XCTAssertNil(try credentials.load(), "failed account switch retained old credentials")
+    }
+
     func testLocalLogoutEvenIfRemoteRevocationFails() async throws {
         let (client, credentials, provider) = try fixture()
         _ = try await client.signIn()
