@@ -48,6 +48,7 @@ def main():
         q = f"""SELECT md5(coalesce(string_agg(table_name || ':' || column_name || ':' || data_type || ':' || is_nullable, '|' ORDER BY table_name, ordinal_position), '')) FROM information_schema.columns WHERE table_schema = '{args.schema}'"""
         return sql(url, q)
     try:
+        check("distinct database identities", lambda: verify_distinct(args.source_url, args.target_url, sql))
         check("source schema exists", lambda: assert_schema(args.source_url, args.schema, sql))
         if args.reset_managed_fixture:
             check("reset managed target fixture", lambda: reset_managed(args.target_url, args.schema, sql))
@@ -56,7 +57,7 @@ def main():
             dump = str(Path(tmp) / "fixture.dump")
             check("backup", lambda: run(["pg_dump", "-Fc", "-n", args.schema, "-f", dump, "-d", args.source_url], os.environ.copy()))
             check("archive readable", lambda: run(["pg_restore", "--list", dump], os.environ.copy())[:100])
-            check("restore", lambda: run(["pg_restore", "--exit-on-error", "--no-owner", "--no-acl", "-d", args.target_url, dump], os.environ.copy()))
+            check("restore", lambda: run(["pg_restore", "--exit-on-error", "--no-owner", "-d", args.target_url, dump], os.environ.copy()))
             check("mark managed fixture", lambda: sql(args.target_url, "COMMENT ON SCHEMA " + args.schema + " IS 'm0-runner-managed-v1'"))
             check("schema fingerprint", lambda: compare(fingerprint(args.source_url), fingerprint(args.target_url)))
             check("table row counts", lambda: compare(table_counts(args.source_url, args.schema, sql), table_counts(args.target_url, args.schema, sql)))
@@ -70,6 +71,16 @@ def main():
         path.write_text(json.dumps(report, indent=2) + "\n")
         print(f"{report['status']}: {path}")
     return 0 if report["status"] == "PASS" else 1
+
+def verify_distinct(source, target, sql):
+    # PostgreSQL cluster identifier plus database OID distinguishes DBs even
+    # when URLs differ only by credentials or host aliases. Fail closed if unavailable.
+    statement = "SELECT system_identifier::text || ':' || (SELECT oid::text FROM pg_database WHERE datname=current_database()) FROM pg_control_system()"
+    source_id = sql(source, statement)
+    target_id = sql(target, statement)
+    if not source_id or not target_id or source_id == target_id:
+        raise AssertionError("Source and recovery must have distinct verified database identities")
+    return "Verified distinct databases"
 
 def compare(a, b):
     if a != b:
