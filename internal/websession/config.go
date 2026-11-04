@@ -77,14 +77,14 @@ func (c Config) validate() (string, error) {
 	token, err := strictHTTPS(c.TokenURL, true)
 	if err != nil { return "", fmt.Errorf("token endpoint: %w", err) }
 	callback, err := strictHTTPS(c.RedirectURI, true)
-	if err != nil || callback.Path != "/web/auth/callback" {
+	if err != nil || callback.Path != "/web/auth/callback" || callback.EscapedPath() != "/web/auth/callback" {
 		return "", errors.New("OIDC redirect URI must be fixed to /web/auth/callback on HTTPS")
 	}
 	host := callback.Hostname()
 	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
 		return "", errors.New("OIDC browser callback must target a numeric loopback IP")
 	}
-	if auth.Hostname() != issuer.Hostname() || token.Hostname() != issuer.Hostname() {
+	if auth.Host != issuer.Host || token.Host != issuer.Host {
 		return "", errors.New("OIDC endpoints must be hosted on the pinned issuer host")
 	}
 	if c.ClientID == "" || c.APIAudience == "" || c.RequiredACR == "" ||
