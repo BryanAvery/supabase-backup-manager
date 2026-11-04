@@ -28,3 +28,14 @@ func TestValidateListen(t *testing.T) {
 		})
 	}
 }
+
+func TestDaemonRuntimeRejectsRoot(t *testing.T) {
+	if err:=validateServiceUID(0);err==nil{
+		t.Fatal("root was allowed to run the local management daemon")
+	}
+	for _,uid:=range []int{100,501,1001}{
+		if err:=validateServiceUID(uid);err!=nil{
+			t.Fatalf("non-root dedicated user rejected: uid=%d err=%v",uid,err)
+		}
+	}
+}
