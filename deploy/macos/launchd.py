@@ -120,7 +120,7 @@ def render(config: dict) -> dict:
     if not isinstance(config, dict) or set(config) - CONFIG_KEYS:
         raise ConfigError("unsupported configuration")
     user = public(config.get("service_user"), "service_user")
-    if not SAFE_USER.fullmatch(user):
+    if user in {"_root", "_daemon", "_nobody"} or not SAFE_USER.fullmatch(user):
         raise ConfigError("use a dedicated underscore-prefixed non-root service identity")
     listen = validate_listen(config.get("listen"))
     binary = secure_path(config.get("binary"))
