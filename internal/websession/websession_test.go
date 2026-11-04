@@ -26,6 +26,7 @@ type syntheticStore struct {
 	mu sync.Mutex
 	identities map[string]catalogue.Actor
 	revoked map[string]bool
+	revokeExpiry time.Time
 }
 func(s *syntheticStore)ResolveIdentity(_ context.Context,key string)(catalogue.Actor,error){
 	s.mu.Lock();defer s.mu.Unlock()
@@ -37,9 +38,10 @@ func(s *syntheticStore)IsAccessTokenRevoked(_ context.Context,d string)(bool,err
 	s.mu.Lock();defer s.mu.Unlock()
 	return s.revoked[d],nil
 }
-func(s *syntheticStore)RevokeAccessToken(_ context.Context,d string,_ time.Time)error{
+func(s *syntheticStore)RevokeAccessToken(_ context.Context,d string,expiry time.Time)error{
 	s.mu.Lock();defer s.mu.Unlock()
 	s.revoked[d]=true
+	s.revokeExpiry=expiry
 	return nil
 }
 func(s *syntheticStore)ListProjects(_ context.Context,user string)([]catalogue.Project,error){
@@ -54,6 +56,7 @@ type testProvider struct{
 	nonceOverride,subjectOverride string
 	exchanges int
 	expiresIn int
+	oversized bool
 	issuer string
 	signingKey *rsa.PrivateKey
 }
@@ -75,6 +78,7 @@ func(p *testProvider)serve(t *testing.T,w http.ResponseWriter,r *http.Request){
 	p.mu.Lock()
 	challenge,nonceOverride,subjectOverride:=p.challenge,p.nonceOverride,p.subjectOverride
 	expiresIn:=p.expiresIn
+	oversized:=p.oversized
 	if expiresIn==0{expiresIn=300}
 	p.exchanges++
 	p.mu.Unlock()
@@ -103,6 +107,9 @@ func(p *testProvider)serve(t *testing.T,w http.ResponseWriter,r *http.Request){
 		"token_type":"Bearer","expires_in":expiresIn,
 		"access_token":access,"id_token":id,
 	})
+	if oversized {
+		_,_ =w.Write([]byte(strings.Repeat(" ",17000)))
+	}
 }
 type browserFixture struct{
 	handler http.Handler
@@ -346,4 +353,46 @@ func TestPlaintextAndUnconfiguredBrowserEndpointsFailClosed(t *testing.T){
 	if resp.StatusCode!=401{t.Fatalf("browser projects accessible anonymously: %d",resp.StatusCode)}
 	resp,_=f.do(t,"POST","/web/projects",nil,nil)
 	if resp.StatusCode!=405{t.Fatalf("unauthorised browser project writes enabled: %d",resp.StatusCode)}
+}
+
+func TestTokenEndpointOversizedBodyRejected(t *testing.T){
+	f:=makeFixture(t)
+	state,_,cookie:=f.start(t)
+	f.provider.mu.Lock()
+	f.provider.oversized=true
+	f.provider.mu.Unlock()
+	resp,_:=f.callback(t,state,cookie)
+	if resp.StatusCode!=401 {
+		t.Fatalf("oversized OIDC token response accepted: %d",resp.StatusCode)
+	}
+	for _,cookie:=range resp.Cookies(){
+		if cookie.Name==sessionCookie && cookie.MaxAge>=0 {
+			t.Fatal("oversized token response issued a browser session")
+		}
+	}
+}
+
+func TestLogoutRevocationCoversFullAccessTokenLifetime(t *testing.T){
+	f:=makeFixture(t)
+	f.provider.mu.Lock()
+	f.provider.expiresIn=60
+	f.provider.mu.Unlock()
+	state,_,login:=f.start(t)
+	resp,_:=f.callback(t,state,login)
+	if resp.StatusCode!=303{t.Fatalf("callback failed: %d",resp.StatusCode)}
+	session:=cookieByName(t,resp,sessionCookie)
+	resp,body:=f.do(t,"GET","/web/session",[]*http.Cookie{session},nil)
+	if resp.StatusCode!=200{t.Fatal("session not available")}
+	var info struct{CSRF string `json:"csrf_token"`}
+	if err:=json.Unmarshal(body,&info);err!=nil{t.Fatal(err)}
+	resp,_=f.do(t,"POST","/web/logout",[]*http.Cookie{session},map[string]string{
+		"Origin":f.app.URL,"X-CSRF-Token":info.CSRF,
+	})
+	if resp.StatusCode!=204{t.Fatalf("logout failed: %d",resp.StatusCode)}
+	f.store.mu.Lock()
+	expiry:=f.store.revokeExpiry
+	f.store.mu.Unlock()
+	if !expiry.After(time.Now().Add(2*time.Minute)) {
+		t.Fatalf("revocation expired too early, before bearer token's actual expiry: %v",expiry)
+	}
 }
