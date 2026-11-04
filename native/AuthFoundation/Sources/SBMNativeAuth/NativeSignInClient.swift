@@ -93,6 +93,9 @@ public final class NativeSignInClient {
         authenticating = true
         defer { authenticating = false }
 
+        // A failed account switch must not leave an earlier account active.
+        // Clear before launching the external authentication browser.
+        try credentials.clear()
         let loginURL = try flow.begin()
         let callback = try await browser.authorize(loginURL,
                                    callbackScheme: configuration.redirectURI.scheme!)
