@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrowserAPI, type Project, type Readiness } from "./api.js";
 import { DashboardController, type DashboardState } from "./controller.js";
 import "./styles.css";
 
 function Icon({ name, size = 20 }: { name: "shield" | "grid" | "layers" | "lock" | "refresh" | "log-out" | "clock" | "info" | "cloud" | "server" | "arrow"; size?: number }) {
-  const paths: Record<typeof name, React.ReactNode> = {
+  const paths: Record<typeof name, ReactNode> = {
     shield: <><path d="m12 2 8 4v5c0 5-3.4 8.8-8 11-4.6-2.2-8-6-8-11V6l8-4Z"/><path d="m9 12 2 2 4-4"/></>,
     grid: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
     layers: <><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></>,
