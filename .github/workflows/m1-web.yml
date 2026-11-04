@@ -53,10 +53,10 @@ jobs:
       - name: Emit dependency lockfile for reproducible follow-up commit
         working-directory: web
         run: |
-          echo 'SBM_WEB_LOCK_GZIP_BASE64_START'
-          gzip -c package-lock.json | base64 -w0
+          echo 'SBM_WEB_LOCK_BASE64_START'
+          gzip -c package-lock.json |base64 -w0 package-lock.json
           echo
-          echo 'SBM_WEB_LOCK_GZIP_BASE64_END'
+          echo 'SBM_WEB_LOCK_BASE64_END'
       - name: Upload browser build evidence
         uses: actions/upload-artifact@v4
         with:
