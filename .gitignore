@@ -28,3 +28,6 @@ coverage/
 *.xcresult/
 native/DesktopApp/SupabaseBackupManager.xcodeproj/
 native/DesktopApp/Generated/
+
+# Compiled Node test output
+.test-build/
