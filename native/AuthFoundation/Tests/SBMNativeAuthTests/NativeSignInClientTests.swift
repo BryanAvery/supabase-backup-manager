@@ -187,15 +187,16 @@ final class NativeSignInClientTests: XCTestCase {
         let projects = try await client.authorisedProjectsJSON()
         XCTAssertTrue(provider.lastProjectRequestIsBearer)
         XCTAssertTrue(String(data: projects, encoding: .utf8)!.contains("fixture-project"))
-        XCTAssertTrue(try await client.signOut())
+        let revoked = try await client.signOut()
+        XCTAssertTrue(revoked)
         XCTAssertNil(try credentials.load())
-        await XCTAssertThrowsErrorAsync(try await client.authorisedProjectsJSON())
+        await expectAuthFailure { try await client.authorisedProjectsJSON() }
     }
 
     func testWrongIDSubjectNeverStoresCredential() async throws {
         let (client, credentials, provider) = try fixture()
         provider.wrongSubject = true
-        await XCTAssertThrowsErrorAsync(try await client.signIn())
+        await expectAuthFailure { try await client.signIn() }
         XCTAssertNil(try credentials.load())
     }
 
@@ -208,7 +209,7 @@ final class NativeSignInClientTests: XCTestCase {
             case "MFA": provider.wrongMFA = true
             default: provider.denyAPI = true
             }
-            await XCTAssertThrowsErrorAsync(try await client.signIn())
+            await expectAuthFailure { try await client.signIn() }
             XCTAssertNil(try credentials.load(), "saved token for invalid \(violation)")
         }
     }
@@ -217,17 +218,17 @@ final class NativeSignInClientTests: XCTestCase {
         let (client, credentials, provider) = try fixture()
         _ = try await client.signIn()
         provider.revokeAccepted = false
-        XCTAssertFalse(try await client.signOut())
+        let revoked = try await client.signOut()
+        XCTAssertFalse(revoked)
         XCTAssertNil(try credentials.load())
     }
 }
 
 @MainActor
-func XCTAssertThrowsErrorAsync<T>(_ expression: @autoclosure () async throws -> T,
-                                   file: StaticString = #filePath,
-                                   line: UInt = #line) async {
+func expectAuthFailure<T>(_ action: () async throws -> T,
+                          file: StaticString = #filePath, line: UInt = #line) async {
     do {
-        _ = try await expression()
+        _ = try await action()
         XCTFail("Expected secure operation to fail", file: file, line: line)
     } catch {}
 }
