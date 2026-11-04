@@ -40,6 +40,9 @@ jobs:
         shell: bash
         run: |
           python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports
+      - name: Run Stage 2 security and integrity checks
+        shell: bash
+        run: python3 m0/stage2.py --output reports
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4
