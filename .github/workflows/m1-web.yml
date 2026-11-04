@@ -28,9 +28,9 @@ jobs:
         run: |
           node --version
           npm --version
-      - name: Resolve pinned dependencies and generate the reviewed npm lockfile
+      - name: Install integrity-pinned dependencies from committed lockfile
         working-directory: web
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Strict TypeScript contract checks
         working-directory: web
         run: npm run check
@@ -50,13 +50,6 @@ jobs:
             echo 'Unexpected privileged secret marker in browser bundle'
             exit 1
           fi
-      - name: Emit dependency lockfile for reproducible follow-up commit
-        working-directory: web
-        run: |
-          echo 'SBM_WEB_LOCK_BASE64_START'
-          gzip -c package-lock.json |base64 -w0 package-lock.json
-          echo
-          echo 'SBM_WEB_LOCK_BASE64_END'
       - name: Upload browser build evidence
         uses: actions/upload-artifact@v4
         with:
