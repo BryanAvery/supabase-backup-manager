@@ -64,3 +64,13 @@ The manual GitHub Actions workflow now runs **two consecutive Stage 1 and Stage 
 **Safety:** only use a separately verified disposable recovery database. The marker-controlled reset drops `m0_fixture` with `CASCADE` when previously marked by the runner; review dependencies. The source fixture is not cleaned. Do not trigger this workflow until the target identity and secrets are confirmed.
 
 Run the offline acceptance check against existing reports with `python3 m0/stage3.py --reports reports`. It does not connect to or modify databases.
+
+
+## M0 hardening: identity, ACL restore and role checks
+
+- Before **any target cleanup**, Stage 1 queries `pg_control_system()` for the PostgreSQL cluster system identifier and combines it with the current database OID. If the identities match, or if the query is unavailable, the run stops without cleanup. Connection URL inequality is not treated as proof of isolation.
+- Stage 1 now restores ACLs (it no longer uses `--no-acl`), while still avoiding owner restoration. The target must already have referenced roles, and ACL restore may fail if grants require unavailable roles or privileges. Such a failure is intentional, not silently ignored.
+- Stage 2 checks `anon` and `authenticated` see zero fixture rows, and verifies that the privileged fixture baseline is non-empty and matches between source and recovery.
+- Stage 3 requires both the identity and expanded role checks in each cycle.
+
+**Remaining acceptance limitations:** These role tests do not simulate a genuine signed-in Supabase user with JWT claims or prove that a permitted authenticated user can access their own row. They also do not verify application/API authentication, or complete Supabase disaster recovery. A full positive JWT/RLS test requires a fixture with a documented permitted user and claims. The database-identity query requires permission to call `pg_control_system()`; if denied, request an approved safe identity mechanism rather than bypassing the check. Confirm the recovery target is disposable and has no external dependencies before running the marker-controlled `DROP SCHEMA ... CASCADE`.
