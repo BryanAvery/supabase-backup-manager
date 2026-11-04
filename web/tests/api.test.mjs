@@ -49,7 +49,9 @@ test("browser API uses only fixed same-origin URLs and never puts bearer tokens 
   const fakeFetch = async (url, options) => {
     calls.push({ url, options });
     if (url === "/web/session") {
-      return new Response(JSON.stringify(GOOD_SESSION), {
+      return new Response(JSON.stringify({
+        ...GOOD_SESSION, expires_at: "2099-11-04T12:10:00Z"
+      }), {
         status: 200, headers: { "Content-Type": "application/json" }
       });
     }
@@ -61,8 +63,8 @@ test("browser API uses only fixed same-origin URLs and never puts bearer tokens 
     return new Response(null, { status: 204 });
   };
   const api = new BrowserAPI(fakeFetch);
-  // This test does not rely on the current wall clock.
-  await assert.rejects(() => api.session(), /expired browser session/);
+  // The browser API must accept a valid future session at any test date.
+  assert.equal((await api.session()).authenticated, true);
   assert.equal((await api.projects())[0].name, "Synthetic");
   await api.logout("a".repeat(43));
   assert.deepEqual(calls.map(c => c.url), ["/web/session", "/web/projects", "/web/logout"]);
