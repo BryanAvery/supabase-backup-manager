@@ -174,7 +174,7 @@ func(h *Handler)complete(w http.ResponseWriter,r *http.Request){
 	end:=time.Now().Add(sessionMaxAge)
 	if principal.TokenExpiresAt.Before(end){end=principal.TokenExpiresAt}
 	if idExpiry.Before(end){end=idExpiry}
-	if !end.After(time.Now().Add(time.Second)){jsonError(w,http.StatusUnauthorized);return}
+	if !end.After(time.Now()){jsonError(w,http.StatusUnauthorized);return}
 	sessionID,err:=randomValue();if err!=nil{jsonError(w,500);return}
 	csrf,err:=randomValue();if err!=nil{jsonError(w,500);return}
 	s:=browserSession{
