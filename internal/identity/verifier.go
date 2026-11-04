@@ -1,12 +1,12 @@
 package identity
 
 import (
+ "context"
  "crypto/rsa"
  "crypto/sha256"
  "crypto/tls"
  "encoding/hex"
  "errors"
- "fmt"
  "net/http"
  "net/url"
  "strconv"
