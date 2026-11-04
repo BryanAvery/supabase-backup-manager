@@ -78,3 +78,7 @@ Run the offline acceptance check against existing reports with `python3 m0/stage
 ## Failure diagnostics
 
 The workflow now saves the Stage 1 or Stage 2 JSON report for a failed cycle before exiting. It emits a GitHub Actions error annotation naming the failed check without echoing database credentials or connection strings. The Stage 3 acceptance gate still fails closed if a cycle is incomplete, and the artifact upload runs even on failure. For a failed run, download `m0-validation-report` and inspect `cycle-1-stage1.json` or `cycle-1-stage2.json` to identify the underlying error. Do not share unredacted reports publicly because database error messages may contain connection details.
+
+## Supabase-hosted identity verification
+
+If the provider blocks `pg_control_system()`, M0 now accepts **only** two Supabase session-pooler connection URLs with different `postgres.<20-character-project-ref>` usernames and `*.pooler.supabase.com` hosts. The pooler project reference determines routing to a Supabase project. A matching project reference, unsupported connection form or ambiguous URL fails before target cleanup. This fallback checks project routing information in the connection URLs, not an independently retrieved database identifier. Operators must still verify that the target project is disposable and separate from the source. For direct database connections, use the PostgreSQL system identity check or obtain an approved independent identity mechanism; do not bypass the guard.
