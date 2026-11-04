@@ -12,7 +12,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -179,6 +178,21 @@ func TestVerifiedBearerOverTLSAndRevocation(t *testing.T){
 	if code,_:=do("POST","/api/v1/projects",tokenA,`{"name":"Browser attack","environment":"cloud"}`,map[string]string{"Origin":"https://attacker.example"});code!=403{
 		t.Fatalf("browser write CSRF allowed %d",code)
 	}
+	// A forwarded TLS header must never replace an actual TLS connection.
+	plain := httptest.NewRequest(http.MethodGet,"http://localhost/api/v1/projects",nil)
+	plain.Header.Set("Authorization","Bearer "+tokenA)
+	plain.Header.Set("X-Forwarded-Proto","https")
+	plainResult := httptest.NewRecorder()
+	handler.ServeHTTP(plainResult,plain)
+	if plainResult.Code!=http.StatusUnauthorized {
+		t.Fatalf("forwarded HTTPS header bypassed TLS requirement: %d",plainResult.Code)
+	}
+
+	// A modified signed access token must never be accepted.
+	modified := tokenA[:len(tokenA)-8]+"12345678"
+	if code,_:=do("GET","/api/v1/projects",modified,"",nil);code!=401{
+		t.Fatalf("tampered bearer token accepted: %d",code)
+	}
 	if code,_:=do("POST","/api/v1/sessions/revoke",tokenA,"",nil);code!=204{
 		t.Fatalf("token revocation failed %d",code)
 	}
@@ -194,5 +208,4 @@ func TestVerifiedBearerOverTLSAndRevocation(t *testing.T){
 	if code,_:=do("GET","/api/v1/projects",forged,"",map[string]string{"X-User-ID":"user-a","X-Role":"administrator"});code!=401{
 		t.Fatalf("fabricated or disabled token identity accepted %d",code)
 	}
-	_ = fmt.Sprintf("%s",p.ID)
 }
