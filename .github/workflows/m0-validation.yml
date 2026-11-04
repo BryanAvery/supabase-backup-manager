@@ -39,7 +39,7 @@ jobs:
       - name: Run M0 fixture validation
         shell: bash
         run: |
-          python3 m0/run_m0.py --confirm-isolated-target --output reports
+          python3 m0/run_m0.py --confirm-isolated-target --reset-managed-fixture --output reports
       - name: Upload validation evidence
         if: always()
         uses: actions/upload-artifact@v4
