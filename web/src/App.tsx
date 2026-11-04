@@ -89,7 +89,6 @@ export default function App() {
   }, [controller]);
 
   const signedIn = state.phase === "signed_in";
-  const busy = state.phase === "loading";
   const expiredAt = state.session ? Date.parse(state.session.expires_at) : NaN;
   const expiry = Number.isFinite(expiredAt)
     ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(expiredAt))
