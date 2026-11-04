@@ -74,7 +74,42 @@ def main():
     return 0 if report["status"] == "PASS" else 1
 
 def verify_distinct(source, target, sql):
-    """Fail closed if the two connections cannot be independently distinguished."""
+    """Fail closed unless distinct database routes can be established.
+
+    Supabase pooler usernames contain the project reference used for routing.
+    Independently provisioned Supabase projects can share PostgreSQL system
+    identifiers (for example after cloning), and both commonly use database
+    OID 5. Prefer explicit project routing for recognised pooler URLs.
+    """
+    def pooler_project(url):
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        username = unquote(parsed.username or "")
+        if not host.endswith(".pooler.supabase.com"):
+            return None
+        if (parsed.scheme not in ("postgres", "postgresql")
+                or not username.startswith("postgres.")
+                or not parsed.password
+                or not parsed.path.strip("/")):
+            raise AssertionError("Invalid Supabase pooler connection; refusing cleanup")
+        project = username.removeprefix("postgres.")
+        if not (len(project) == 20 and project.isalnum() and project.islower()):
+            raise AssertionError("Invalid Supabase pooler project reference")
+        return project
+
+    source_project = pooler_project(source)
+    target_project = pooler_project(target)
+    if source_project is not None or target_project is not None:
+        if source_project is None or target_project is None:
+            raise AssertionError("Both connections must be Supabase pooler URLs to verify project routing")
+        if source_project == target_project:
+            raise AssertionError("Source and target Supabase project references match")
+        # Confirm the routing credentials actually connect before proceeding.
+        # Do not expose project refs, credentials or server addresses in reports.
+        sql(source, "SELECT current_database()")
+        sql(target, "SELECT current_database()")
+        return "Verified distinct Supabase pooler project references"
+
     statement = ("SELECT system_identifier::text || ':' || "
                  "(SELECT oid::text FROM pg_database WHERE datname=current_database()) "
                  "FROM pg_control_system()")
@@ -82,33 +117,9 @@ def verify_distinct(source, target, sql):
         source_id = sql(source, statement)
         target_id = sql(target, statement)
     except RuntimeError:
-        # Hosted Supabase often restricts pg_control_system(). The pooler
-        # routes postgres.<project_ref> usernames to a specific project.
-        # Only accept this fallback when both URLs are Supabase pooler
-        # connections and contain different, valid project references.
-        def pooler_project(url):
-            parsed = urlsplit(url)
-            host = (parsed.hostname or "").lower()
-            username = unquote(parsed.username or "")
-            if (parsed.scheme not in ("postgres", "postgresql")
-                    or not host.endswith(".pooler.supabase.com")
-                    or not username.startswith("postgres.")
-                    or not parsed.password
-                    or not parsed.path.strip("/")):
-                raise AssertionError(
-                    "Database identity could not be verified. Use two distinct "
-                    "Supabase pooler URLs (postgres.<project_ref> usernames), "
-                    "or grant approved access to pg_control_system().")
-            project = username.removeprefix("postgres.")
-            if not (len(project) == 20 and project.isalnum() and project.islower()):
-                raise AssertionError("Invalid Supabase pooler project reference")
-            return project
-        source_project = pooler_project(source)
-        target_project = pooler_project(target)
-        if source_project == target_project:
-            raise AssertionError("Source and target Supabase project references match")
-        # Do not print project refs or connection details into public logs.
-        return "Distinct Supabase pooler project references"
+        raise AssertionError(
+            "Database identity could not be verified. Use distinct Supabase pooler "
+            "URLs or grant approved access to pg_control_system().")
     if not source_id or not target_id or source_id == target_id:
         raise AssertionError("Source and recovery resolve to the same database identity")
     return "Verified distinct PostgreSQL databases"
