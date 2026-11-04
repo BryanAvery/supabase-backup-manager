@@ -22,6 +22,7 @@ def main():
     ap.add_argument("--schema", default="m0_fixture")
     ap.add_argument("--output", default="reports")
     ap.add_argument("--confirm-isolated-target", action="store_true")
+    ap.add_argument("--reset-managed-fixture", action="store_true")
     args = ap.parse_args()
     if not args.source_url or not args.target_url or not args.confirm_isolated_target:
         ap.error("Provide M0_SOURCE_URL, M0_TARGET_URL and --confirm-isolated-target")
@@ -48,12 +49,15 @@ def main():
         return sql(url, q)
     try:
         check("source schema exists", lambda: assert_schema(args.source_url, args.schema, sql))
+        if args.reset_managed_fixture:
+            check("reset managed target fixture", lambda: reset_managed(args.target_url, args.schema, sql))
         check("target schema absent", lambda: assert_absent(args.target_url, args.schema, sql))
         with tempfile.TemporaryDirectory(prefix="m0-") as tmp:
             dump = str(Path(tmp) / "fixture.dump")
             check("backup", lambda: run(["pg_dump", "-Fc", "-n", args.schema, "-f", dump, "-d", args.source_url], os.environ.copy()))
             check("archive readable", lambda: run(["pg_restore", "--list", dump], os.environ.copy())[:100])
             check("restore", lambda: run(["pg_restore", "--exit-on-error", "--no-owner", "--no-acl", "-d", args.target_url, dump], os.environ.copy()))
+            check("mark managed fixture", lambda: sql(args.target_url, "COMMENT ON SCHEMA " + args.schema + " IS 'm0-runner-managed-v1'"))
             check("schema fingerprint", lambda: compare(fingerprint(args.source_url), fingerprint(args.target_url)))
             check("table row counts", lambda: compare(table_counts(args.source_url, args.schema, sql), table_counts(args.target_url, args.schema, sql)))
             check("RLS flags", lambda: compare(rls_flags(args.source_url, args.schema, sql), rls_flags(args.target_url, args.schema, sql)))
@@ -76,6 +80,15 @@ def assert_schema(url, schema, sql):
     if sql(url, f"SELECT count(*) FROM pg_namespace WHERE nspname='{schema}'") != "1":
         raise AssertionError("Source fixture schema missing")
     return "Present"
+
+def reset_managed(url, schema, sql):
+    marker = sql(url, f"SELECT coalesce(obj_description(oid, 'pg_namespace'),'') FROM pg_namespace WHERE nspname='{schema}'")
+    if not marker:
+        return "No existing fixture"
+    if marker != "m0-runner-managed-v1":
+        raise AssertionError("Existing target fixture is not runner-managed; refusing cleanup")
+    sql(url, f'DROP SCHEMA "{schema}" CASCADE')
+    return "Removed managed fixture"
 
 def assert_absent(url, schema, sql):
     if sql(url, f"SELECT count(*) FROM pg_namespace WHERE nspname='{schema}'") != "0":
