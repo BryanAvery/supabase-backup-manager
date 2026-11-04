@@ -36,7 +36,22 @@ func validateListen(address string) error {
 	return nil
 }
 
+// Refuse privilege escalation even if launchd is misconfigured or someone
+// manually starts the daemon using sudo. The privileged installer has no
+// reason to execute the HTTP/SQLite service as root.
+func validateServiceUID(euid int) error {
+	if euid == 0 {
+		return errors.New("refusing to run as root; configure a dedicated non-admin launchd UserName")
+	}
+	return nil
+}
+
 func run() error {
+	if err := validateServiceUID(os.Geteuid()); err != nil {
+		return err
+	}
+	// Protect SQLite metadata and runtime-created files even outside launchd.
+	syscall.Umask(0077)
 	o := serviceOptions{}
 	flag.StringVar(&o.listen, "listen", defaultListen, "numeric loopback IP and TCP port")
 	flag.StringVar(&o.cataloguePath, "catalogue", "", "absolute path to private local catalogue")

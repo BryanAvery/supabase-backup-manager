@@ -1,0 +1,72 @@
+name: M1 macOS launchd packaging and headless service gates
+on:
+  pull_request:
+    paths:
+      - 'deploy/macos/**'
+      - '.github/workflows/m1-daemon.yml'
+      - 'cmd/backup-manager/**'
+      - 'internal/**'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/macos/**'
+      - '.github/workflows/m1-daemon.yml'
+      - 'cmd/backup-manager/**'
+      - 'internal/**'
+permissions:
+  contents: read
+jobs:
+  launchd-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Parse packaging scripts
+        run: python -m compileall -q deploy/macos
+      - name: Run non-destructive safety and malicious-config tests
+        run: python -m unittest discover -s deploy/macos -p 'test_*.py' -v
+
+  macos-headless:
+    runs-on: macos-15
+    timeout-minutes: 20
+    needs: launchd-policy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Record actual runner architecture and versions
+        run: |
+          sw_vers
+          uname -m
+          id
+          go version
+          python3 --version
+          openssl version
+      - name: Render private launchd staging configuration
+        run: |
+          cp deploy/macos/examples/locked-local.json "$RUNNER_TEMP/locked-local.json"
+          chmod 600 "$RUNNER_TEMP/locked-local.json"
+          python3 deploy/macos/launchd.py render \
+            --config "$RUNNER_TEMP/locked-local.json" \
+            --output "$RUNNER_TEMP/org.example.supabasebackupmanager.daemon.plist"
+          plutil -lint "$RUNNER_TEMP/org.example.supabasebackupmanager.daemon.plist"
+          python3 -c 'import pathlib,plistlib,os; p=plistlib.loads(pathlib.Path(os.environ["RUNNER_TEMP"], "org.example.supabasebackupmanager.daemon.plist").read_bytes()); assert p["UserName"]=="_sbmbackup" and p["RunAtLoad"] and p["KeepAlive"] and p["Umask"]==63 and p["HardResourceLimits"]["Core"]==0; assert "EnvironmentVariables" not in p; assert p["ProgramArguments"][0].startswith("/Library/Application Support/"); print("PASS: least-privileged boot plist structure")'
+      - name: Build real Go service on macOS
+        run: |
+          go version
+          go build -trimpath -o "$RUNNER_TEMP/backup-manager" ./cmd/backup-manager
+          test -x "$RUNNER_TEMP/backup-manager"
+      - name: Exercise headless TLS, denied access, crash and clean restart
+        run: python3 deploy/macos/headless_smoke.py --binary "$RUNNER_TEMP/backup-manager"
+      - name: Print explicit evidence limits
+        run: |
+          echo "CI tested: plist rendering/lint, macOS native binary, independent TLS 1.3, private catalogue, SIGTERM and crash restart."
+          echo "CI did NOT test: privileged system launchctl bootstrap, GUI logout, actual reboot, locked Keychain, authorised real IdP, Apple Silicon hardware unless uname -m reports arm64."

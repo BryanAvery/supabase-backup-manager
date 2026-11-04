@@ -1,0 +1,8 @@
+{
+  "service_user": "_sbmbackup",
+  "listen": "127.0.0.1:8765",
+  "binary": "/Library/Application Support/SupabaseBackupManager/bin/backup-manager",
+  "catalogue": "/Library/Application Support/SupabaseBackupManager/private/catalogue.sqlite",
+  "tls_cert": "/Library/Application Support/SupabaseBackupManager/config/loopback.crt",
+  "tls_key": "/Library/Application Support/SupabaseBackupManager/private/loopback.key"
+}
