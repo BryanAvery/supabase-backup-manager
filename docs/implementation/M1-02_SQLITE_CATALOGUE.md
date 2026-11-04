@@ -28,3 +28,9 @@ The catalogue lives in a **local SQLite file**, not the Supabase Cloud PostgreSQ
 Run `go test ./...`, `go vet ./...`, and `go test -race ./...`. Tests cover baseline-schema parity, fresh/repeated migration, foreign-key enforcement, atomic rollback on failed DDL/data statement, changed and unknown migration rejection, snapshot recovery and file-path safety. The repository GitHub Actions workflow is the authoritative Go dependency and build verification.
 
 No Supabase projects, credentials, hosted PostgreSQL schemas, or live backups are involved.
+
+## CI verification (4 November 2026)
+
+Initial GitHub Actions run [41835195372](https://github.com/BryanAvery/supabase-backup-manager/actions/runs/41835195372) passed build, vet and race-enabled tests on Go 1.27.3 (linux/amd64). It generated the official module checksums. The follow-up commit records `go.sum` and makes CI refuse uncommitted dependency changes. This Linux CI result is not evidence of an Apple Silicon macOS launchd test.
+
+A dedicated test now also simulates a **committed later schema migration** and proves a pre-upgrade snapshot can be reopened with its original version, tables and synthetic rows, without risky reverse SQL.
