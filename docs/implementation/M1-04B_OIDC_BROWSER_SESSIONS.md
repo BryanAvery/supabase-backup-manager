@@ -27,7 +27,7 @@ In addition to the M1-04B(1) flags already documented, configuring browser login
 - `-oidc-id-key-id <pinned-id-token-key-id>`
 - `-oidc-id-public-key /absolute/path/approved-id-public.pem`
 
-The `-auth-client-id` must refer to a registered **public PKCE client**; no client secret is accepted by this slice. The identity provider must explicitly support all required signed MFA assertions, the pinned access-token/ID-token profiles, PKCE S256, the issuer response `iss` and the fixed localhost redirect. **No provider has been selected or configured on behalf of the user.** An incompatible provider must lead to a reviewed protocol change, never relaxed signature, audience or MFA checks.
+The identity provider **must not share the loopback application's hostname**, even on a different port. Browser cookies are scoped to hostnames, not ports. The test harness uses separate IPv4 and IPv6 loopback hosts to prove this isolation. The fixed endpoints and S256 flow follow [RFC 9700](https://www.rfc-editor.org/rfc/rfc9700).\n\nThe `-auth-client-id` must refer to a registered **public PKCE client**; no client secret is accepted by this slice. The identity provider must explicitly support all required signed MFA assertions, the pinned access-token/ID-token profiles, PKCE S256, the issuer response `iss` and the fixed localhost redirect. **No provider has been selected or configured on behalf of the user.** An incompatible provider must lead to a reviewed protocol change, never relaxed signature, audience or MFA checks.
 
 ## Verification
 
