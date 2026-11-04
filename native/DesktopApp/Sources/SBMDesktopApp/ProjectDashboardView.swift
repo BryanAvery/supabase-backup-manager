@@ -200,7 +200,7 @@ struct ProjectDashboardView: View {
             .foregroundStyle(.secondary)
             .padding(12)
             .frame(maxWidth: 540, alignment: .leading)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
             .accessibilityLabel(message)
     }
 }
