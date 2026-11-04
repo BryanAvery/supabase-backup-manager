@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 public enum NativeAuthError: Error, Equatable {
     case invalidConfiguration
