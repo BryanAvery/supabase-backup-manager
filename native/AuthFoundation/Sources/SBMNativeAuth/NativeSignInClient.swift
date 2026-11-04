@@ -200,6 +200,10 @@ public final class NativeSignInClient {
         guard let token = try credentials.load() else {
             throw NativeAuthError.credentialUnavailable
         }
+        guard token.expiresAt > Date() else {
+            try credentials.clear()
+            throw NativeAuthError.unauthorised
+        }
         let (body, status) = try await authenticatedRequest(
             path: "projects", token: token.accessToken, method: "GET"
         )
@@ -215,6 +219,10 @@ public final class NativeSignInClient {
     /// No previous user or project state is trusted from local preferences.
     public func restoreSession() async throws -> NativeIdentity? {
         guard let credential = try credentials.load() else { return nil }
+        guard credential.expiresAt > Date() else {
+            try credentials.clear()
+            return nil
+        }
         let (body, status) = try await authenticatedRequest(
             path: "me", token: credential.accessToken, method: "GET"
         )
