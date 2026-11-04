@@ -1,0 +1,36 @@
+name: M1 Go service scaffold
+on:
+  pull_request:
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - '.github/workflows/m1-go.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - '.github/workflows/m1-go.yml'
+permissions:
+  contents: read
+jobs:
+  go-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Show toolchain
+        run: go version
+      - name: Build service
+        run: go build ./cmd/backup-manager
+      - name: Static checks
+        run: go vet ./...
+      - name: Unit and race tests
+        run: go test -race -count=1 ./...
