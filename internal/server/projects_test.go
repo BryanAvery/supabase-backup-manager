@@ -209,3 +209,26 @@ func TestRequestLimiter(t *testing.T){
   if w.Code!=want{t.Fatalf("got %d want %d",w.Code,want)}
  }
 }
+
+func TestProjectRoleMatrixAndMembershipRevocation(t *testing.T){
+ for _,role:=range []string{"viewer","operator","administrator","recovery_approver"}{
+  t.Run(role,func(t *testing.T){
+   store,db:=newTestCatalogue(t)
+   owner:=NewCatalogueHandler(store,testAuthenticator{principal:Principal{UserID:"actor-a",CanProvisionProjects:true}})
+   project:=create(t,owner,"Synthetic role test")
+   if _,err:=db.Exec("INSERT INTO project_members(project_id,user_id,role) VALUES(?,?,?)",project.ID,"actor-b",role);err!=nil{t.Fatal(err)}
+   member:=NewCatalogueHandler(store,testAuthenticator{principal:Principal{UserID:"actor-b"}})
+   visible:=request(t,member,"GET","/api/v1/projects","",nil)
+   if visible.Code!=200 || !strings.Contains(visible.Body.String(),project.ID){
+    t.Fatalf("authorised %s cannot see project: %d %s",role,visible.Code,visible.Body.String())
+   }
+   caps:=request(t,member,"GET","/api/v1/projects/"+project.ID+"/capabilities","",nil)
+   if caps.Code!=200{t.Fatalf("%s denied capabilities: %d",role,caps.Code)}
+   if _,err:=db.Exec("DELETE FROM project_members WHERE project_id=? AND user_id=?",project.ID,"actor-b");err!=nil{t.Fatal(err)}
+   visible=request(t,member,"GET","/api/v1/projects","",nil)
+   if visible.Code!=200 || strings.Contains(visible.Body.String(),project.ID){t.Fatalf("%s retained membership after revocation",role)}
+   caps=request(t,member,"GET","/api/v1/projects/"+project.ID+"/capabilities","",nil)
+   if caps.Code!=404{t.Fatalf("%s retained access after membership removal: %d",role,caps.Code)}
+  })
+ }
+}
