@@ -129,7 +129,7 @@ final class SimulatedTransport: SecureHTTPTransport {
         }
         if url.path == "/api/v1/projects" {
             provider.lastProjectRequestIsBearer = true
-            return reply(Data(#"[{"id":"fixture-project","name":"Fixture"}]"#.utf8), status: 200)
+            return reply(Data(#"[{"id":"aab77233-d8ec-45f4-9da9-eaf8e1a29cca","name":"fixture-project","environment":"cloud","readiness":"unknown"}]"#.utf8), status: 200)
         }
         if url.path == "/api/v1/sessions/revoke" {
             XCTAssertEqual(request.httpMethod, "POST")
@@ -223,6 +223,36 @@ final class NativeSignInClientTests: XCTestCase {
         provider.wrongMFA = true
         await expectAuthFailure { try await client.signIn() }
         XCTAssertNil(try credentials.load(), "failed account switch retained old credentials")
+    }
+
+    func testRestoreRequiresLiveVerifiedAPIIdentity() async throws {
+        let (client, credentials, provider) = try fixture()
+        try credentials.save(AccessCredential(
+            accessToken: "synthetic-access-token",
+            expiresAt: Date().addingTimeInterval(120)
+        ))
+        let restored = try await client.restoreSession()
+        XCTAssertEqual(restored?.userID, "local-user")
+        XCTAssertEqual(restored?.subject, "fixture-user")
+        let projects = try await client.authorisedProjects()
+        XCTAssertEqual(projects.count, 1)
+        XCTAssertEqual(projects[0].environment, .cloud)
+        XCTAssertEqual(projects[0].readiness, .unknown)
+        provider.denyAPI = true
+        await expectAuthFailure { try await client.restoreSession() }
+        XCTAssertNil(try credentials.load())
+    }
+
+    func testExpiredStoredBearerIsNeverRestoredOrUsed() async throws {
+        let (client, credentials, _) = try fixture()
+        try credentials.save(AccessCredential(
+            accessToken: "synthetic-access-token",
+            expiresAt: Date().addingTimeInterval(-30)
+        ))
+        let restored = try await client.restoreSession()
+        XCTAssertNil(restored)
+        XCTAssertNil(try credentials.load())
+        await expectAuthFailure { try await client.authorisedProjects() }
     }
 
     func testLocalLogoutEvenIfRemoteRevocationFails() async throws {

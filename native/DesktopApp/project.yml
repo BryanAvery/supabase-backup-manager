@@ -1,0 +1,53 @@
+name: SupabaseBackupManager
+options:
+  minimumXcodeGenVersion: 2.35.0
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  SBMNativeAuth:
+    path: ../AuthFoundation
+  SBMDesktopFoundation:
+    path: ../DesktopFoundation
+
+targets:
+  SupabaseBackupManager:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: Sources/SBMDesktopApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.supabasebackupmanager
+        PRODUCT_NAME: SupabaseBackupManager
+        ENABLE_APP_SANDBOX: YES
+        SWIFT_VERSION: "5.9"
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: Supabase Backup Manager
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHighResolutionCapable: true
+        CFBundleURLTypes:
+          - CFBundleURLName: org.example.supabasebackupmanager
+            CFBundleURLSchemes:
+              - org.example.supabasebackupmanager
+    entitlements:
+      path: Generated/App.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+    dependencies:
+      - package: SBMNativeAuth
+        product: SBMNativeAuth
+      - package: SBMDesktopFoundation
+        product: SBMDesktopFoundation
+    scheme: {}

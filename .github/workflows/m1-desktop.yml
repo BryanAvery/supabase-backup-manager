@@ -1,0 +1,56 @@
+name: M1 SwiftUI desktop shell
+on:
+  pull_request:
+    paths:
+      - 'native/DesktopApp/**'
+      - 'native/DesktopFoundation/**'
+      - 'native/AuthFoundation/**'
+      - '.github/workflows/m1-desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'native/DesktopApp/**'
+      - 'native/DesktopFoundation/**'
+      - 'native/AuthFoundation/**'
+      - '.github/workflows/m1-desktop.yml'
+permissions:
+  contents: read
+jobs:
+  desktop-build-and-tests:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: macOS and Swift toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcrun swift --version
+          xcodebuild -version
+      - name: Run desktop state and expired-session tests
+        run: xcrun swift test --package-path native/DesktopFoundation --parallel
+      - name: Generate macOS application project
+        run: |
+          brew install xcodegen
+          xcodegen --version
+          cd native/DesktopApp
+          xcodegen generate --spec project.yml
+      - name: Compile actual macOS .app bundle (unsigned CI build)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project native/DesktopApp/SupabaseBackupManager.xcodeproj \
+            -scheme SupabaseBackupManager \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/sbm-desktop-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Confirm app bundle and OIDC URL registration
+        run: |
+          APP="$RUNNER_TEMP/sbm-desktop-build/Build/Products/Debug/SupabaseBackupManager.app"
+          test -d "$APP"
+          test -f "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" | grep -Fx org.example.supabasebackupmanager
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$APP/Contents/Info.plist" | grep -Fx org.example.supabasebackupmanager
+          echo "Unsigned test build only. No real IdP registration or production account enabled."
